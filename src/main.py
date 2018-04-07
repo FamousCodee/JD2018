@@ -3,10 +3,12 @@ import os
 import csv
 import pandas as pd
 
-path_train = "/data/dm/train.csv"  # 训练文件
-path_test = "/data/dm/test.csv"  # 测试文件
-
-path_test_out = "model/"  # 预测结果输出路径为model/xx.csv,有且只能有一个文件并且是CSV格式。
+if os.path.exists("./data/PINGAN-2018-train_demo.csv"):
+    path_train = "./data/PINGAN-2018-train_demo.csv"
+else:
+    path_train = "/data/dm/train.csv"  # 训练文件
+    path_test = "/data/dm/test.csv"  # 测试文件
+    path_test_out = "model/"  # 预测结果输出路径为model/xx.csv,有且只能有一个文件并且是CSV格式。
 
 
 def read_csv():
@@ -49,4 +51,5 @@ def process():
 if __name__ == "__main__":
     print("****************** start **********************")
     # 程序入口
-    process()
+    # process()
+    
