@@ -23,13 +23,15 @@ def read_csv():
     :return: 
     """
     # for filename in os.listdir(path_train):
-    tempdata = pd.read_csv(path_train)
+    train = pd.read_csv(path_train)
     test = pd.DataFrame()
     if PREDICT:
         test = pd.read_csv(path_test)
+    tempdata = pd.concat([train, test], 0)
+    nrow_train = train.shape[0]
     tempdata.columns = ["TERMINALNO", "TIME", "TRIP_ID", "LONGITUDE", "LATITUDE", "DIRECTION", "HEIGHT", "SPEED",
                         "CALLSTATE", "Y"]
-    return tempdata, test
+    return tempdata, nrow_train
 
 
 def process():
@@ -62,37 +64,3 @@ if __name__ == "__main__":
     print("****************** start **********************")
     # 程序入口
     # process()
-    train, test = read_csv()
-    nrow_train = train.shape[0]
-    train = pd.concat([train, test], 0)
-    # print(df.head())
-    y_train = np.log1p(train["Y"])
-    X = train.drop('Y',axis=1, inplace=False)
-    # del train
-    # gc.collect()
-    x_train = X[:nrow_train]
-    x_test = X[nrow_train:]
-
-    train_X, valid_X, train_Y, valid_Y = train_test_split(x_train, y_train, test_size=0.1)
-    d_train = lgb.Dataset(train_X, label=train_Y)
-    d_valid = lgb.Dataset(valid_X, label=valid_Y)
-    watchlist = [d_train, d_valid]
-    params = {
-        'learning_rate': 0.75,
-        'application': 'regression',
-        'max_depth': 3,
-        'num_leaves': 100,
-        'verbosity': -1,
-        'metric': 'RMSE',
-    }
-
-    model = lgb.train(params, 
-    train_set=d_train, 
-    num_boost_round=2200,
-    valid_sets=watchlist,
-    early_stopping_rounds=50,
-    verbose_eval=100)
-
-if PREDICT:
-    preds = model.predict(x_test)
-    
