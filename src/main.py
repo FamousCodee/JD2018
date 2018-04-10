@@ -27,11 +27,54 @@ def read_csv():
     test = pd.DataFrame()
     if PREDICT:
         test = pd.read_csv(path_test)
-    tempdata = pd.concat([train, test], 0)
+    train = pd.concat([train, test], 0)
     nrow_train = train.shape[0]
-    tempdata.columns = ["TERMINALNO", "TIME", "TRIP_ID", "LONGITUDE", "LATITUDE", "DIRECTION", "HEIGHT", "SPEED",
+    train.columns = ["TERMINALNO", "TIME", "TRIP_ID", "LONGITUDE", "LATITUDE", "DIRECTION", "HEIGHT", "SPEED",
                         "CALLSTATE", "Y"]
-    return tempdata, nrow_train
+    return train, nrow_train
+
+
+def get_speed_feature(trainset):
+    """
+    速度处理：最大最小平均
+    :param trainset:
+    :return:
+    """
+    groupby_userid = trainset.groupby('TERMINALNO', as_index=False)
+
+    maxspeed = groupby_userid['SPEED'].max()
+    maxspeed.columns = ["TERMINALNO", "SPEED_max"]
+
+    meanspeed = groupby_userid['SPEED'].mean()
+    meanspeed.columns = ["TERMINALNO", "SPEED_mean"]
+
+    speed_feature = pd.merge(maxspeed, meanspeed, on='TERMINALNO')
+    return speed_feature
+
+
+def test_speed_feature():
+    train, nrow_train = read_csv()
+    print(get_speed_feature(train).head())
+
+
+def get_direction_feature(trainset):
+    """
+    方向处理：方差
+    :param trainset:
+    :return:
+    """
+    groupby_userid_tripid = trainset.groupby(['TERMINALNO', 'TRIP_ID'], as_index=False)
+    max_var = groupby_userid_tripid['DIRECTION'].var().fillna(0).groupby('TERMINALNO', as_index=False)['DIRECTION'].max()
+    max_var.columns = ['TERMINALNO', 'DIRECTION_var_max']
+    mean_var = groupby_userid_tripid['DIRECTION'].var().fillna(0).groupby('TERMINALNO', as_index=False)['DIRECTION'].mean()
+    mean_var.columns = ['TERMINALNO', 'DIRECTION_var_mean']
+    direction_feature = pd.merge(max_var, mean_var, on='TERMINALNO')
+    return direction_feature
+
+
+def test_direction_feature():
+    train, nrow_train = read_csv()
+    print(get_direction_feature(train).head())
 
 
 def process():
@@ -64,3 +107,5 @@ if __name__ == "__main__":
     print("****************** start **********************")
     # 程序入口
     # process()
+    # test_speed_feature()
+    test_direction_feature()
