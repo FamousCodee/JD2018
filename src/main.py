@@ -15,6 +15,7 @@ else:
     path_train = "/data/dm/train.csv"  # 训练文件
     path_test = "/data/dm/test.csv"  # 测试文件
     path_test_out = "model/"  # 预测结果输出路径为model/xx.csv,有且只能有一个文件并且是CSV格式。
+    path_test_out = os.path.join(path_test_out, "test.csv")
 
 
 def read_csv():
@@ -24,14 +25,16 @@ def read_csv():
     """
     # for filename in os.listdir(path_train):
     train = pd.read_csv(path_train)
+    nrow_train = train.shape[0]
     test = pd.DataFrame()
     if PREDICT:
         test = pd.read_csv(path_test)
     train = pd.concat([train, test], 0)
-    nrow_train = train.shape[0]
     train.columns = ["TERMINALNO", "TIME", "TRIP_ID", "LONGITUDE", "LATITUDE", "DIRECTION", "HEIGHT", "SPEED",
                         "CALLSTATE", "Y"]
-    return train, nrow_train
+    test = train[nrow_train:]
+    train = train[:nrow_train]
+    return train, test
 
 
 def get_speed_feature(trainset):
@@ -53,7 +56,7 @@ def get_speed_feature(trainset):
 
 
 def test_speed_feature():
-    train, nrow_train = read_csv()
+    train, test = read_csv()
     print(get_speed_feature(train).head())
 
 
@@ -75,6 +78,72 @@ def get_direction_feature(trainset):
 def test_direction_feature():
     train, nrow_train = read_csv()
     print(get_direction_feature(train).head())
+
+
+def get_Y(trainset):
+    """
+    提取Y值
+    :param trainset:
+    :return:
+    """
+    Y = trainset.groupby('TERMINALNO', as_index=False)['Y'].max()
+    Y.columns = ['TERMINALNO', 'Y']
+    # Y = Y['Y']
+    return Y
+
+
+def test_Y():
+    train, nrow_train = read_csv()
+    print(get_Y(train).head())
+
+
+def make_train_set(trainset):
+    speed = get_speed_feature(trainset)
+    direction = get_direction_feature(trainset)
+    y = get_Y(trainset)
+    x = pd.merge(speed, direction, on='TERMINALNO')
+
+    return x, y
+
+
+def test_make_train_set():
+    x1, x2, y1, y2 = make_train_set()
+    print(x1.head())
+    print(x2.head())
+
+
+def lightgbm_make_submission():
+    train, test = read_csv()
+    # x_train, x_test, y_train, y_test = make_train_set()
+    x_train, y_train = make_train_set(train)
+    x_test, y_test = make_train_set(test)
+    y_train = y_train['Y']
+    # print(x_train.head())
+    # print(x_test.head())
+    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.1, random_state=0)
+    params = {
+        'learning_rate': 0.05,
+        'application': 'regression',
+        'max_depth': -1,
+        'num_leaves': 200,
+        'verbosity': -1,
+        'metric': 'RMSE',
+    }
+    d_train = lgb.Dataset(train_x, label=train_y)
+    d_valid = lgb.Dataset(valid_x, label=valid_y)
+    watchlist = [d_train, d_valid]
+    model = lgb.train(params, train_set=d_train, num_boost_round=2200, valid_sets=watchlist,
+                      early_stopping_rounds=50, verbose_eval=100)
+    if PREDICT:
+        print("*******************************start predict***************************")
+        preds = model.predict(x_test)
+        # print(preds)
+        y_test['Y'] = preds
+        y_test.columns = ['TERMINALNO', 'Pred']
+        x_test = pd.merge(x_test, y_test, on='TERMINALNO')
+        # x_test.set_index('TERMINALNO', inplace=True)
+        print(x_test.head())
+        x_test.to_csv(path_test_out, columns=['Pred'], index=True, index_label=['Id'])
 
 
 def process():
@@ -108,4 +177,7 @@ if __name__ == "__main__":
     # 程序入口
     # process()
     # test_speed_feature()
-    test_direction_feature()
+    # test_direction_feature()
+    # test_Y()
+    # test_make_train_set()
+    lightgbm_make_submission()
