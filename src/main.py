@@ -23,17 +23,21 @@ def read_csv():
     文件读取模块，头文件见columns.
     :return: 
     """
+    # print("*****************read_csv*******************")
     # for filename in os.listdir(path_train):
     train = pd.read_csv(path_train)
     nrow_train = train.shape[0]
     test = pd.DataFrame()
+    # test = pd.read_csv(path_train)
     if PREDICT:
         test = pd.read_csv(path_test)
     train = pd.concat([train, test], 0)
-    train.columns = ["TERMINALNO", "TIME", "TRIP_ID", "LONGITUDE", "LATITUDE", "DIRECTION", "HEIGHT", "SPEED",
-                        "CALLSTATE", "Y"]
+    # print(train)
+    # train.columns = ["TERMINALNO", "TIME", "TRIP_ID", "LONGITUDE", "LATITUDE", "DIRECTION", "HEIGHT", "SPEED",
+                        # "CALLSTATE", "Y"]
     test = train[nrow_train:]
     train = train[:nrow_train]
+    # print("****************read_csv done***************")
     return train, test
 
 
@@ -43,6 +47,7 @@ def get_speed_feature(trainset):
     :param trainset:
     :return:
     """
+    # print("*************get speed feature**************")
     groupby_userid = trainset.groupby('TERMINALNO', as_index=False)
 
     maxspeed = groupby_userid['SPEED'].max()
@@ -52,6 +57,7 @@ def get_speed_feature(trainset):
     meanspeed.columns = ["TERMINALNO", "SPEED_mean"]
 
     speed_feature = pd.merge(maxspeed, meanspeed, on='TERMINALNO')
+    # print("*************get speed feature done**********")
     return speed_feature
 
 
@@ -66,12 +72,14 @@ def get_direction_feature(trainset):
     :param trainset:
     :return:
     """
+    # print("**************get direction feature**********")
     groupby_userid_tripid = trainset.groupby(['TERMINALNO', 'TRIP_ID'], as_index=False)
     max_var = groupby_userid_tripid['DIRECTION'].var().fillna(0).groupby('TERMINALNO', as_index=False)['DIRECTION'].max()
     max_var.columns = ['TERMINALNO', 'DIRECTION_var_max']
     mean_var = groupby_userid_tripid['DIRECTION'].var().fillna(0).groupby('TERMINALNO', as_index=False)['DIRECTION'].mean()
     mean_var.columns = ['TERMINALNO', 'DIRECTION_var_mean']
     direction_feature = pd.merge(max_var, mean_var, on='TERMINALNO')
+    # print("**************get direction feature done**********")
     return direction_feature
 
 
@@ -86,9 +94,11 @@ def get_Y(trainset):
     :param trainset:
     :return:
     """
+    # print("******************get Y*******************")
     Y = trainset.groupby('TERMINALNO', as_index=False)['Y'].max()
     Y.columns = ['TERMINALNO', 'Y']
     # Y = Y['Y']
+    # print("***************get Y done*****************")
     return Y
 
 
@@ -98,11 +108,12 @@ def test_Y():
 
 
 def make_train_set(trainset):
+    print("**************make set*******************")
     speed = get_speed_feature(trainset)
     direction = get_direction_feature(trainset)
     y = get_Y(trainset)
     x = pd.merge(speed, direction, on='TERMINALNO')
-
+    print("**************make set done**************")
     return x, y
 
 
@@ -118,8 +129,12 @@ def lightgbm_make_submission():
     x_train, y_train = make_train_set(train)
     x_test, y_test = make_train_set(test)
     y_train = y_train['Y']
-    # print(x_train.head())
-    # print(x_test.head())
+    print("**********************x_train*******************")
+    print(x_train.head())
+    print("**********************x_train end***************")
+    print("**********************x_test********************")
+    print(x_test.head())
+    print("**********************x_test end****************")
     train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.1, random_state=0)
     params = {
         'learning_rate': 0.05,
