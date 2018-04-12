@@ -88,6 +88,29 @@ def test_direction_feature():
     print(get_direction_feature(train).head())
 
 
+def get_call_state_feature(trainset):
+    """
+    电话状态特征
+    :param trainset:
+    :return:
+    """
+    groupby_userid_tripid = trainset.groupby(['TERMINALNO'], as_index=False)
+    count = groupby_userid_tripid['CALLSTATE'].agg({
+        # 'count0':lambda x: list(x).count(0) / len(x),
+                                                  'count1':lambda x: list(x).count(1) / len(x),
+                                                  'count2':lambda x: list(x).count(2) / len(x),
+                                                  'count3':lambda x: list(x).count(3) / len(x),
+                                                  # 'count4':lambda x: list(x).count(4) / len(x)
+    })
+    return count
+
+
+def test_call_state_feature():
+    train, test = read_csv()
+    call = get_call_state_feature(train)
+    print(call.head())
+
+
 def get_Y(trainset):
     """
     提取Y值
@@ -111,8 +134,10 @@ def make_train_set(trainset):
     print("**************make set*******************")
     speed = get_speed_feature(trainset)
     direction = get_direction_feature(trainset)
+    call = get_call_state_feature(trainset)
     y = get_Y(trainset)
     x = pd.merge(speed, direction, on='TERMINALNO')
+    x = pd.merge(x, call, on='TERMINALNO')
     print("**************make set done**************")
     return x, y
 
@@ -196,3 +221,4 @@ if __name__ == "__main__":
     # test_Y()
     # test_make_train_set()
     lightgbm_make_submission()
+    # test_call_state_feature()
