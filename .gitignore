@@ -2,3 +2,4 @@
 *.zip
 *.log
 *.txt
+data/out.csv

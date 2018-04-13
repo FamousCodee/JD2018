@@ -9,9 +9,11 @@ from sklearn.model_selection import train_test_split, cross_val_score
 
 if os.path.exists("./data/PINGAN-2018-train_demo.csv"):
     path_train = "./data/PINGAN-2018-train_demo.csv"
-    PREDICT = False 
+    path_test = path_train
+    path_test_out = "./data/out.csv"
+    # PREDICT = False
 else:
-    PREDICT = True 
+    # PREDICT = True
     path_train = "/data/dm/train.csv"  # 训练文件
     path_test = "/data/dm/test.csv"  # 测试文件
     path_test_out = "model/"  # 预测结果输出路径为model/xx.csv,有且只能有一个文件并且是CSV格式。
@@ -29,8 +31,8 @@ def read_csv():
     nrow_train = train.shape[0]
     test = pd.DataFrame()
     # test = pd.read_csv(path_train)
-    if PREDICT:
-        test = pd.read_csv(path_test)
+    # if PREDICT:
+    test = pd.read_csv(path_test)
     train = pd.concat([train, test], 0)
     # print(train)
     # train.columns = ["TERMINALNO", "TIME", "TRIP_ID", "LONGITUDE", "LATITUDE", "DIRECTION", "HEIGHT", "SPEED",
@@ -131,14 +133,16 @@ def test_Y():
 
 
 def make_train_set(trainset):
-    print("**************make set*******************")
+    # print("**************make set*******************")
     speed = get_speed_feature(trainset)
     direction = get_direction_feature(trainset)
     call = get_call_state_feature(trainset)
     y = get_Y(trainset)
-    x = pd.merge(speed, direction, on='TERMINALNO')
-    x = pd.merge(x, call, on='TERMINALNO')
-    print("**************make set done**************")
+    x = speed
+    # x = pd.merge(x, direction, on='TERMINALNO')
+    # x = pd.merge(x, call, on='TERMINALNO')
+    x.set_index('TERMINALNO', inplace=True)
+    # print("**************make set done**************")
     return x, y
 
 
@@ -154,12 +158,12 @@ def lightgbm_make_submission():
     x_train, y_train = make_train_set(train)
     x_test, y_test = make_train_set(test)
     y_train = y_train['Y']
-    print("**********************x_train*******************")
-    print(x_train.head())
-    print("**********************x_train end***************")
-    print("**********************x_test********************")
-    print(x_test.head())
-    print("**********************x_test end****************")
+    # print("**********************x_train*******************")
+    # print(x_train.head())
+    # print("**********************x_train end***************")
+    # print("**********************x_test********************")
+    # print(x_test.head())
+    # print("**********************x_test end****************")
     train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.1, random_state=0)
     params = {
         'learning_rate': 0.05,
@@ -174,16 +178,19 @@ def lightgbm_make_submission():
     watchlist = [d_train, d_valid]
     model = lgb.train(params, train_set=d_train, num_boost_round=2200, valid_sets=watchlist,
                       early_stopping_rounds=50, verbose_eval=100)
-    if PREDICT:
-        print("*******************************start predict***************************")
-        preds = model.predict(x_test)
-        # print(preds)
-        y_test['Y'] = preds
-        y_test.columns = ['TERMINALNO', 'Pred']
-        x_test = pd.merge(x_test, y_test, on='TERMINALNO')
-        # x_test.set_index('TERMINALNO', inplace=True)
-        print(x_test.head())
-        x_test.to_csv(path_test_out, columns=['Pred'], index=True, index_label=['Id'])
+    # if PREDICT:
+    print("*******************************start predict***************************")
+    preds = model.predict(x_test)
+    preds[preds < 0] = 0
+    # print(preds)
+    y_test['Y'] = preds
+    print(y_test['Y'].var())
+    y_test.columns = ['TERMINALNO', 'Pred']
+    y_test.set_index('TERMINALNO', inplace=True)
+    x_test = pd.merge(x_test, y_test, left_index=True, right_index=True)
+    # x_test.set_index('TERMINALNO', inplace=True)
+    print(x_test.head())
+    x_test.to_csv(path_test_out, columns=['Pred'], index=True, index_label=['Id'])
 
 
 def process():
