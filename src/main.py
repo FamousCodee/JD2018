@@ -97,10 +97,10 @@ def get_call_state_feature(trainset):
     groupby_userid_tripid = trainset.groupby(['TERMINALNO'], as_index=False)
     count = groupby_userid_tripid['CALLSTATE'].agg({
         # 'count0':lambda x: list(x).count(0) / len(x),
-                                                  'count1':lambda x: list(x).count(1) / len(x),
-                                                  'count2':lambda x: list(x).count(2) / len(x),
-                                                  'count3':lambda x: list(x).count(3) / len(x),
-                                                  # 'count4':lambda x: list(x).count(4) / len(x)
+        'count1': lambda x: list(x).count(1) / (len(x) - list(x).count(0) + 1),
+        'count2': lambda x: list(x).count(2) / (len(x) - list(x).count(0) + 1),
+        'count3': lambda x: list(x).count(3) / (len(x) - list(x).count(0) + 1),
+        # 'count4':lambda x: list(x).count(4) / len(x)
     })
     return count
 
