@@ -171,7 +171,7 @@ def lightgbm_make_submission():
         'max_depth': -1,
         'num_leaves': 200,
         'verbosity': -1,
-        'metric': 'RMSE',
+        'metric': 'poisson',
     }
     d_train = lgb.Dataset(train_x, label=train_y)
     d_valid = lgb.Dataset(valid_x, label=valid_y)
