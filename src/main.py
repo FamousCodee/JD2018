@@ -28,6 +28,7 @@ def read_csv():
     # print("*****************read_csv*******************")
     # for filename in os.listdir(path_train):
     train = pd.read_csv(path_train)
+    train = train[(True ^ train['Y'].isin([0]))]
     nrow_train = train.shape[0]
     test = pd.DataFrame()
     # test = pd.read_csv(path_train)
@@ -122,7 +123,7 @@ def get_Y(trainset):
     # print("******************get Y*******************")
     Y = trainset.groupby('TERMINALNO', as_index=False)['Y'].max()
     Y.columns = ['TERMINALNO', 'Y']
-    # Y = Y['Y']
+    # Y['Y'] = Y['Y'] ** 2
     # print("***************get Y done*****************")
     return Y
 
@@ -139,8 +140,8 @@ def make_train_set(trainset):
     call = get_call_state_feature(trainset)
     y = get_Y(trainset)
     x = speed
-    # x = pd.merge(x, direction, on='TERMINALNO')
-    # x = pd.merge(x, call, on='TERMINALNO')
+    x = pd.merge(x, direction, on='TERMINALNO')
+    x = pd.merge(x, call, on='TERMINALNO')
     x.set_index('TERMINALNO', inplace=True)
     # print("**************make set done**************")
     return x, y
@@ -159,29 +160,36 @@ def lightgbm_make_submission():
     x_test, y_test = make_train_set(test)
     y_train = y_train['Y']
     # print("**********************x_train*******************")
-    # print(x_train.head())
+    # print(x_train)
     # print("**********************x_train end***************")
     # print("**********************x_test********************")
     # print(x_test.head())
     # print("**********************x_test end****************")
     train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.1, random_state=0)
     params = {
-        'learning_rate': 0.05,
+        'learning_rate': 0.005,
         'application': 'regression',
         'max_depth': -1,
         'num_leaves': 200,
         'verbosity': -1,
-        'metric': 'poisson',
+        # 'metric': 'poisson',
+        'min_data': 1,
+        'min_data_in_bin': 1,
+        # 'poisson_max_delta_step': 7,
+        # 'reg_sqrt': True,
+        'metric': 'rmse',
+        # 'metric': 'l2',
     }
     d_train = lgb.Dataset(train_x, label=train_y)
     d_valid = lgb.Dataset(valid_x, label=valid_y)
     watchlist = [d_train, d_valid]
-    model = lgb.train(params, train_set=d_train, num_boost_round=2200, valid_sets=watchlist,
+    model = lgb.train(params, train_set=d_train, num_boost_round=10000, valid_sets=watchlist,
                       early_stopping_rounds=50, verbose_eval=100)
     # if PREDICT:
     print("*******************************start predict***************************")
     preds = model.predict(x_test)
     preds[preds < 0] = 0
+    # pres = np.sqrt(preds)
     # print(preds)
     y_test['Y'] = preds
     print(y_test['Y'].var())
