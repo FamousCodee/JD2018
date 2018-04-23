@@ -3,7 +3,8 @@ import os
 import csv
 import pandas as pd
 import numpy as np 
-import lightgbm as lgb 
+import lightgbm as lgb
+from sklearn import linear_model
 import gc 
 from sklearn.model_selection import train_test_split, cross_val_score
 
@@ -28,7 +29,7 @@ def read_csv():
     # print("*****************read_csv*******************")
     # for filename in os.listdir(path_train):
     train = pd.read_csv(path_train)
-    train = train[(True ^ train['Y'].isin([0]))]
+    # train = train[(True ^ train['Y'].isin([0]))]
     nrow_train = train.shape[0]
     test = pd.DataFrame()
     # test = pd.read_csv(path_train)
@@ -147,10 +148,6 @@ def make_train_set(trainset):
     return x, y
 
 
-def test_make_train_set():
-    x1, x2, y1, y2 = make_train_set()
-    print(x1.head())
-    print(x2.head())
 
 
 def lightgbm_make_submission():
@@ -172,13 +169,13 @@ def lightgbm_make_submission():
         'max_depth': -1,
         'num_leaves': 200,
         'verbosity': -1,
-        # 'metric': 'poisson',
-        'min_data': 1,
-        'min_data_in_bin': 1,
+        'metric': 'poisson',
+        # 'min_data': 1,
+        # 'min_data_in_bin': 1,
         # 'poisson_max_delta_step': 7,
         # 'reg_sqrt': True,
-        'metric': 'rmse',
-        # 'metric': 'l2',
+        # 'metric': 'rmse',
+        # 'metric': ['rmse', 'poisson'],
     }
     d_train = lgb.Dataset(train_x, label=train_y)
     d_valid = lgb.Dataset(valid_x, label=valid_y)
@@ -191,6 +188,25 @@ def lightgbm_make_submission():
     preds[preds < 0] = 0
     # pres = np.sqrt(preds)
     # print(preds)
+    y_test['Y'] = preds
+    print(y_test['Y'].var())
+    y_test.columns = ['TERMINALNO', 'Pred']
+    y_test.set_index('TERMINALNO', inplace=True)
+    x_test = pd.merge(x_test, y_test, left_index=True, right_index=True)
+    # x_test.set_index('TERMINALNO', inplace=True)
+    print(x_test.head())
+    x_test.to_csv(path_test_out, columns=['Pred'], index=True, index_label=['Id'])
+
+
+def ridge_make_submission():
+    train, test = read_csv()
+    x_train, y_train = make_train_set(train)
+    x_test, y_test = make_train_set(test)
+    y_train = y_train['Y']
+    model = linear_model.Ridge()
+    model.fit(x_train, y_train)
+    preds = model.predict(x_test)
+    preds[preds < 0] = 0
     y_test['Y'] = preds
     print(y_test['Y'].var())
     y_test.columns = ['TERMINALNO', 'Pred']
@@ -235,5 +251,6 @@ if __name__ == "__main__":
     # test_direction_feature()
     # test_Y()
     # test_make_train_set()
-    lightgbm_make_submission()
+    # lightgbm_make_submission()
     # test_call_state_feature()
+    ridge_make_submission()
