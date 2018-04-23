@@ -12,9 +12,9 @@ if os.path.exists("./data/PINGAN-2018-train_demo.csv"):
     path_train = "./data/PINGAN-2018-train_demo.csv"
     path_test = path_train
     path_test_out = "./data/out.csv"
-    # PREDICT = False
+    PREDICT = False
 else:
-    # PREDICT = True
+    PREDICT = True
     path_train = "/data/dm/train.csv"  # 训练文件
     path_test = "/data/dm/test.csv"  # 测试文件
     path_test_out = "model/"  # 预测结果输出路径为model/xx.csv,有且只能有一个文件并且是CSV格式。
@@ -100,11 +100,11 @@ def get_call_state_feature(trainset):
     """
     groupby_userid_tripid = trainset.groupby(['TERMINALNO'], as_index=False)
     count = groupby_userid_tripid['CALLSTATE'].agg({
-        # 'count0':lambda x: list(x).count(0) / len(x),
+        'count0':lambda x: list(x).count(0) / len(x),
         'count1': lambda x: list(x).count(1) / (len(x) - list(x).count(0) + 1),
-        'count2': lambda x: list(x).count(2) / (len(x) - list(x).count(0) + 1),
+        # 'count2': lambda x: list(x).count(2) / (len(x) - list(x).count(0) + 1),
         'count3': lambda x: list(x).count(3) / (len(x) - list(x).count(0) + 1),
-        # 'count4':lambda x: list(x).count(4) / len(x)
+        'count4':lambda x: list(x).count(4) / len(x)
     })
     return count
 
@@ -143,6 +143,13 @@ def make_train_set(trainset):
     x = speed
     x = pd.merge(x, direction, on='TERMINALNO')
     x = pd.merge(x, call, on='TERMINALNO')
+    df = pd.merge(x, y, on='TERMINALNO')    
+    if PREDICT == False:
+        df.corr().to_csv("./data/corr.csv")
+    else:
+        print(df.corr())
+    del df
+    gc.collect()
     x.set_index('TERMINALNO', inplace=True)
     # print("**************make set done**************")
     return x, y
@@ -194,7 +201,7 @@ def lightgbm_make_submission():
     y_test.set_index('TERMINALNO', inplace=True)
     x_test = pd.merge(x_test, y_test, left_index=True, right_index=True)
     # x_test.set_index('TERMINALNO', inplace=True)
-    print(x_test.head())
+    # print(x_test.head())
     x_test.to_csv(path_test_out, columns=['Pred'], index=True, index_label=['Id'])
 
 
@@ -251,6 +258,6 @@ if __name__ == "__main__":
     # test_direction_feature()
     # test_Y()
     # test_make_train_set()
-    # lightgbm_make_submission()
+    lightgbm_make_submission()
     # test_call_state_feature()
-    ridge_make_submission()
+    # ridge_make_submission()

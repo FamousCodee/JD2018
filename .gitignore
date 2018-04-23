@@ -3,3 +3,4 @@
 *.log
 *.txt
 data/out.csv
+data/corr.csv
