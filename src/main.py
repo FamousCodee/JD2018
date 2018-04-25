@@ -100,11 +100,11 @@ def get_call_state_feature(trainset):
     """
     groupby_userid_tripid = trainset.groupby(['TERMINALNO'], as_index=False)
     count = groupby_userid_tripid['CALLSTATE'].agg({
-        'count0':lambda x: list(x).count(0) / len(x),
+        # 'count0':lambda x: list(x).count(0) / len(x),
         'count1': lambda x: list(x).count(1) / (len(x) - list(x).count(0) + 1),
-        # 'count2': lambda x: list(x).count(2) / (len(x) - list(x).count(0) + 1),
+        'count2': lambda x: list(x).count(2) / (len(x) - list(x).count(0) + 1),
         'count3': lambda x: list(x).count(3) / (len(x) - list(x).count(0) + 1),
-        'count4':lambda x: list(x).count(4) / len(x)
+        # 'count4':lambda x: list(x).count(4) / len(x)
     })
     return count
 
@@ -113,6 +113,16 @@ def test_call_state_feature():
     train, test = read_csv()
     call = get_call_state_feature(train)
     print(call.head())
+
+
+def sigmoid(x):
+    s = 1 / (1 + np.exp(-x))
+    return s
+
+
+def unsigmoid(x):
+    s = np.log(x / (1 - x))
+    return s
 
 
 def get_Y(trainset):
@@ -125,6 +135,9 @@ def get_Y(trainset):
     Y = trainset.groupby('TERMINALNO', as_index=False)['Y'].max()
     Y.columns = ['TERMINALNO', 'Y']
     # Y['Y'] = Y['Y'] ** 2
+    # Y['Y'] = np.expm1(Y['Y'])
+    # Y['Y'] = np.log1p(Y['Y'])
+    # Y['Y'] = sigmoid(Y['Y'])
     # print("***************get Y done*****************")
     return Y
 
@@ -143,13 +156,6 @@ def make_train_set(trainset):
     x = speed
     x = pd.merge(x, direction, on='TERMINALNO')
     x = pd.merge(x, call, on='TERMINALNO')
-    df = pd.merge(x, y, on='TERMINALNO')    
-    if PREDICT == False:
-        df.corr().to_csv("./data/corr.csv")
-    else:
-        print(df.corr())
-    del df
-    gc.collect()
     x.set_index('TERMINALNO', inplace=True)
     # print("**************make set done**************")
     return x, y
@@ -161,6 +167,13 @@ def lightgbm_make_submission():
     train, test = read_csv()
     # x_train, x_test, y_train, y_test = make_train_set()
     x_train, y_train = make_train_set(train)
+    # df = pd.merge(x_train, y_train, on='TERMINALNO')
+    # if PREDICT == False:
+    #     df.corr().to_csv("./data/corr.csv")
+    # else:
+    #     print(df.corr())
+    # del df
+    # gc.collect()
     x_test, y_test = make_train_set(test)
     y_train = y_train['Y']
     # print("**********************x_train*******************")
@@ -171,17 +184,18 @@ def lightgbm_make_submission():
     # print("**********************x_test end****************")
     train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.1, random_state=0)
     params = {
+        'boosting': 'dart',
         'learning_rate': 0.005,
         'application': 'regression',
         'max_depth': -1,
         'num_leaves': 200,
         'verbosity': -1,
-        'metric': 'poisson',
+        # 'metric': 'poisson',
         # 'min_data': 1,
         # 'min_data_in_bin': 1,
         # 'poisson_max_delta_step': 7,
         # 'reg_sqrt': True,
-        # 'metric': 'rmse',
+        'metric': 'rmse',
         # 'metric': ['rmse', 'poisson'],
     }
     d_train = lgb.Dataset(train_x, label=train_y)
@@ -193,7 +207,10 @@ def lightgbm_make_submission():
     print("*******************************start predict***************************")
     preds = model.predict(x_test)
     preds[preds < 0] = 0
-    # pres = np.sqrt(preds)
+    # preds = np.sqrt(preds)
+    # preds = np.log1p(preds)
+    # preds = np.expm1(preds)
+    # preds = unsigmoid(preds)
     # print(preds)
     y_test['Y'] = preds
     print(y_test['Y'].var())
@@ -220,7 +237,7 @@ def ridge_make_submission():
     y_test.set_index('TERMINALNO', inplace=True)
     x_test = pd.merge(x_test, y_test, left_index=True, right_index=True)
     # x_test.set_index('TERMINALNO', inplace=True)
-    print(x_test.head())
+    # print(x_test.head())
     x_test.to_csv(path_test_out, columns=['Pred'], index=True, index_label=['Id'])
 
 
