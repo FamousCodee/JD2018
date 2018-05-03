@@ -65,9 +65,9 @@ def get_speed_feature(trainset):
     return speed_feature
 
 
-def test_speed_feature():
-    train, test = read_csv()
-    print(get_speed_feature(train).head())
+# def test_speed_feature():
+#     train, test = read_csv()
+#     print(get_speed_feature(train).head())
 
 
 def get_direction_feature(trainset):
@@ -87,9 +87,9 @@ def get_direction_feature(trainset):
     return direction_feature
 
 
-def test_direction_feature():
-    train, nrow_train = read_csv()
-    print(get_direction_feature(train).head())
+# def test_direction_feature():
+#     train, nrow_train = read_csv()
+#     print(get_direction_feature(train).head())
 
 
 def get_call_state_feature(trainset):
@@ -109,10 +109,10 @@ def get_call_state_feature(trainset):
     return count
 
 
-def test_call_state_feature():
-    train, test = read_csv()
-    call = get_call_state_feature(train)
-    print(call.head())
+# def test_call_state_feature():
+#     train, test = read_csv()
+#     call = get_call_state_feature(train)
+#     print(call.head())
 
 
 def sigmoid(x):
@@ -142,9 +142,9 @@ def get_Y(trainset):
     return Y
 
 
-def test_Y():
-    train, nrow_train = read_csv()
-    print(get_Y(train).head())
+# def test_Y():
+#     train, nrow_train = read_csv()
+#     print(get_Y(train).head())
 
 
 def make_train_set(trainset):
