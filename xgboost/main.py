@@ -156,12 +156,12 @@ def xgboost_model(x_train, y_train, x_test):
         'silent': 1,
         'objective': 'reg:linear'
     }
-    num_round = 283
+    num_round = 1000
     evallist = [(dtest, 'eval'), (dtrain, 'train')]
     model = xgb.train(param, dtrain, num_round, evals=evallist, early_stopping_rounds=10)
     x_test = xgb.DMatrix(x_test)
     preds = model.predict(x_test)
-    preds[preds < 0] = 0.5
+    preds[preds < 0] = 0.1
     return preds
 
 
@@ -178,6 +178,9 @@ def make_submissin():
     SCALE_POS_WEIGHT = y0_size / y1_size
     x_test, y_test = make_train_set(test)
     y_train = y_train['Y']
+    preds = xgboost_model(x_train, y_train, x_train)
+    y_train = preds
+    # SCALE_POS_WEIGHT = 1
     preds = xgboost_model(x_train, y_train, x_test)
     y_test['Y'] = preds
     print(y_test['Y'].var())
