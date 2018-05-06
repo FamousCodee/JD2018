@@ -83,6 +83,38 @@ def get_direction_feature(trainset):
     return direction_feature
 
 
+def get_height_feature(trainset):
+    """
+    高度处理
+    :param trainset:
+    :return:
+    """
+    groupby_userid = trainset.groupby('TERMINALNO', as_index=False)
+
+    max_height = groupby_userid['HEIGHT'].max()
+    max_height.columns = ["TERMINALNO", "HEIGHT_max"]
+    min_height = groupby_userid['HEIGHT'].min()
+    min_height.columns = ['TERMINALNO', 'HEIGHT_min']
+    mean_height = groupby_userid['HEIGHT'].mean()
+    mean_height.columns = ["TERMINALNO", "HEIGHT_mean"]
+
+    groupby_userid_tripid = trainset.groupby(['TERMINALNO', 'TRIP_ID'], as_index=False)
+    max_var = groupby_userid_tripid['HEIGHT'].var().fillna(0).groupby('TERMINALNO', as_index=False)[
+        'HEIGHT'].max()
+    max_var.columns = ['TERMINALNO', 'HEIGHT_var_max']
+    mean_var = groupby_userid_tripid['HEIGHT'].var().fillna(0).groupby('TERMINALNO', as_index=False)[
+        'HEIGHT'].mean()
+    mean_var.columns = ['TERMINALNO', 'HEIGHT_var_mean']
+
+    height_feature = mean_height
+    height_feature = pd.merge(height_feature, max_height, on='TERMINALNO')
+    # height_feature = pd.merge(height_feature, max_var, on='TERMINALNO')
+    # height_feature = pd.merge(height_feature, min_height, on='TERMINALNO')
+    # height_feature = pd.merge(height_feature, mean_var, on='TERMINALNO')
+    # print(height_feature.head())
+    return height_feature
+
+
 def get_call_state_feature(trainset):
     """
     电话状态特征
@@ -122,10 +154,12 @@ def make_train_set(trainset):
     speed = get_speed_feature(trainset)
     direction = get_direction_feature(trainset)
     call = get_call_state_feature(trainset)
+    height = get_height_feature(trainset)
     y = get_Y(trainset)
     x = speed
     x = pd.merge(x, direction, on='TERMINALNO')
     x = pd.merge(x, call, on='TERMINALNO')
+    x = pd.merge(x, height, on='TERMINALNO')
     x.set_index('TERMINALNO', inplace=True)
     # print("**************make set done**************")
     return x, y
@@ -140,12 +174,12 @@ def ridge_model(x_train, y_train, x_test):
 
 
 def xgboost_model(x_train, y_train, x_test):
-    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.5, random_state=0)
+    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.2, random_state=0)
     dtrain = xgb.DMatrix(train_x, label=train_y)
     dtest = xgb.DMatrix(valid_x, label=valid_y)
     param = {
         'learning_rate': 0.05,
-        'n_estimator': 1000,
+        # 'n_estimator': 1000,
         'max_depth': 3,
         'min_child_weight': 5,
         'gamma': 0,
@@ -178,10 +212,17 @@ def make_submissin():
     SCALE_POS_WEIGHT = y0_size / y1_size
     x_test, y_test = make_train_set(test)
     y_train = y_train['Y']
+    tmp = pd.DataFrame()
+    tmp['rawY'] = y_train
     preds = xgboost_model(x_train, y_train, x_train)
     y_train = preds
+    tmp['newY'] = y_train
     # SCALE_POS_WEIGHT = 1
     preds = xgboost_model(x_train, y_train, x_test)
+    if not PREDICT:
+        print("out tmp ")
+        tmp['pred'] = preds
+        tmp.to_csv('./data/tmp.csv')
     y_test['Y'] = preds
     print(y_test['Y'].var())
     y_test.columns = ['TERMINALNO', 'Pred']
