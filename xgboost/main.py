@@ -140,11 +140,11 @@ def ridge_model(x_train, y_train, x_test):
 
 
 def xgboost_model(x_train, y_train, x_test):
-    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.2, random_state=0)
+    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.5, random_state=0)
     dtrain = xgb.DMatrix(train_x, label=train_y)
     dtest = xgb.DMatrix(valid_x, label=valid_y)
     param = {
-        'learning_rate': 0.5,
+        'learning_rate': 0.05,
         'n_estimator': 1000,
         'max_depth': 3,
         'min_child_weight': 5,
@@ -156,9 +156,9 @@ def xgboost_model(x_train, y_train, x_test):
         'silent': 1,
         'objective': 'reg:linear'
     }
-    num_round = 1000
+    num_round = 10000
     evallist = [(dtest, 'eval'), (dtrain, 'train')]
-    model = xgb.train(param, dtrain, num_round, evals=evallist, early_stopping_rounds=10)
+    model = xgb.train(param, dtrain, num_round, evals=evallist, early_stopping_rounds=10, verbose_eval=False)
     x_test = xgb.DMatrix(x_test)
     preds = model.predict(x_test)
     preds[preds < 0] = 0.1
