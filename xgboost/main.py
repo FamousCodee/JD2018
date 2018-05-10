@@ -159,7 +159,7 @@ def make_train_set(trainset):
     x = speed
     x = pd.merge(x, direction, on='TERMINALNO')
     x = pd.merge(x, call, on='TERMINALNO')
-    x = pd.merge(x, height, on='TERMINALNO')
+    # x = pd.merge(x, height, on='TERMINALNO')
     x.set_index('TERMINALNO', inplace=True)
     # print("**************make set done**************")
     return x, y
@@ -174,7 +174,7 @@ def ridge_model(x_train, y_train, x_test):
 
 
 def xgboost_model(x_train, y_train, x_test):
-    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.2, random_state=0)
+    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.2)
     dtrain = xgb.DMatrix(train_x, label=train_y)
     dtest = xgb.DMatrix(valid_x, label=valid_y)
     param = {
@@ -183,9 +183,9 @@ def xgboost_model(x_train, y_train, x_test):
         'max_depth': 3,
         'min_child_weight': 5,
         'gamma': 0,
-        'subsample': 1,
-        'colsample_bytree': 0.8,
-        'scale_pos_weight': SCALE_POS_WEIGHT,
+        'subsample': 0.8,
+        'colsample_bytree': 0.6,
+        'scale_pos_weight': 1,
         'alpha': 1,
         'lambda': 2,
         'eta': 0.05,
@@ -197,21 +197,18 @@ def xgboost_model(x_train, y_train, x_test):
     model = xgb.train(param, dtrain, num_round, evals=evallist, early_stopping_rounds=10, verbose_eval=250)
     x_test = xgb.DMatrix(x_test)
     preds = model.predict(x_test)
-    preds[preds < 0] = 0
+    # preds[preds < 0] = 0
     return preds
 
 
-def layer1_xgb(train_x, test_x, train_y, test_y):
+def layer1_xgb(train_x, test_x, train_y, test_y, test):
     param = {
-        # 'learning_rate': 0.05,
-        # 'n_estimator': 1000,
         'max_depth': 3,
         'min_child_weight': 5,
         'gamma': 0,
         'subsample': 1,
-        'colsample_bytree': 0.8,
+        'colsample_bytree': 1,
         'scale_pos_weight': SCALE_POS_WEIGHT,
-        'alpha': 1,
         'lambda': 2,
         'eta': 0.05,
         'silent': 1,
@@ -223,32 +220,30 @@ def layer1_xgb(train_x, test_x, train_y, test_y):
     evallist = [(dtest, 'eval'), (dtrain, 'train')]
     model = xgb.train(param, dtrain, num_round, evals=evallist, early_stopping_rounds=10, verbose_eval=250)
     pred = model.predict(dtest)
-    pred[pred < 0] = 0
-    return pred
+    test = xgb.DMatrix(test)
+    pred_test = model.predict(test)
+    # pred[pred < 0] = 0.1
+    # pred_test[pred_test < 0] = 0
+    return pred, pred_test
 
 
 def five_fold_stacking(x_train, y_train, x_test):
     n = x_train.shape[0] // 5
-    # x1 = x_train[:n]
-    # x2 = x_train[n:2*n]
-    # x3 = x_train[2*n:3*n]
-    # x4 = x_train[3*n: 4*n]
-    # x5 = x_train[4*n:]
-    # y1 = y_train[:n]
-    # y2 = y_train[n:2*n]
-    # y3 = y_train[2*n:3*n]
-    # y4 = y_train[3*n: 4*n]
-    # y5 = y_train[4*n: ]
-    # train1 = x_train.drop(np.arange(0,n))
     preds = np.array([])
+    layer1_average_pred_test = np.zeros(x_test.shape[0])
     for i in range(5):
         x1 = x_train[i*n: (i + 1) *n]
         y1 = y_train[i*n: (i + 1) *n]
-        x = x_train.drop(index=list(np.arange(i * n + 1, (i + 1) * n + 1)))
+        if not PREDICT:
+            x = x_train.drop(index=list(np.arange(i * n + 1, (i + 1) * n + 1)))
+        else:
+            x = x_train.drop(index=list(np.arange(i * n, (i + 1) * n)))
         y = y_train.drop(index=np.arange(i*n, (i + 1) *n))
-        pred = layer1_xgb(train_x=x, test_x=x1, train_y=y, test_y=y1)
+        pred, pred_test = layer1_xgb(train_x=x, test_x=x1, train_y=y, test_y=y1, test=x_test)
         preds = np.append(preds, pred)
-    return preds
+        layer1_average_pred_test += pred_test
+    layer1_average_pred_test /= 5
+    return preds, layer1_average_pred_test
 
 
 SCALE_POS_WEIGHT = 0.0
@@ -264,8 +259,9 @@ def make_submissin():
     SCALE_POS_WEIGHT = y0_size / y1_size
     x_test, y_test = make_train_set(test)
     y_train = y_train['Y']
-    tmp = pd.DataFrame()
-    tmp['rawY'] = y_train
+    if not PREDICT:
+        tmp = pd.DataFrame()
+        tmp['rawY'] = y_train
     # preds1 = xgboost_model(x_train, y_train, x_train)
     # tmp['preds1'] = preds1
     # y_train = (y_train + preds1) / 2
@@ -274,11 +270,15 @@ def make_submissin():
     # y_train = (preds1 + preds2) / 2
     # tmp['newY'] = y_train
     # SCALE_POS_WEIGHT = 1
-    preds = five_fold_stacking(x_train, y_train, x_test)
-    tmp['layer1'] = preds
-    y_train = (y_train + preds) / 2
-    tmp['newY'] = y_train
+    preds, layer1_preds = five_fold_stacking(x_train, y_train, x_test)
+    y_train = 0.2 * preds + 0.8 * y_train
+    if not PREDICT:
+        tmp['layer1_combine'] = preds
+        tmp['newY'] = y_train
     preds = xgboost_model(x_train, y_train, x_test)
+    if not PREDICT:
+        tmp['layer1_preds'] = layer1_preds
+    preds = (preds + layer1_preds) / 2
     if not PREDICT:
         print("out tmp ")
         tmp['pred'] = preds
