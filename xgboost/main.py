@@ -138,14 +138,8 @@ def get_Y(trainset):
     :param trainset:
     :return:
     """
-    # print("******************get Y*******************")
     Y = trainset.groupby('TERMINALNO', as_index=False)['Y'].max()
     Y.columns = ['TERMINALNO', 'Y']
-    # Y['Y'] = Y['Y'] ** 2
-    # Y['Y'] = np.expm1(Y['Y'])
-    # Y['Y'] = np.log1p(Y['Y'])
-    # Y['Y'] = sigmoid(Y['Y'])
-    # print("***************get Y done*****************")
     return Y
 
 
@@ -204,10 +198,10 @@ def xgboost_model(x_train, y_train, x_test):
 def layer1_xgb(train_x, test_x, train_y, test_y, test):
     param = {
         'max_depth': 3,
-        'min_child_weight': 5,
+        'min_child_weight': 10,
         'gamma': 1,
-        'subsample': 0.8,
-        'colsample_bytree': 0.5,
+        'subsample': 1,
+        'colsample_bytree': 0.4,
         'scale_pos_weight': SCALE_POS_WEIGHT,
         'lambda': 2,
         'eta': 0.05,
@@ -222,7 +216,7 @@ def layer1_xgb(train_x, test_x, train_y, test_y, test):
     pred = model.predict(dtest)
     test = xgb.DMatrix(test)
     pred_test = model.predict(test)
-    # pred[pred < 0] = 0.1
+    pred[pred < 0] = 0
     # pred_test[pred_test < 0] = 0
     return pred, pred_test
 
@@ -271,7 +265,7 @@ def make_submissin():
     # tmp['newY'] = y_train
     # SCALE_POS_WEIGHT = 1
     preds, layer1_preds = five_fold_stacking(x_train, y_train, x_test)
-    y_train = 0.2 * preds + 0.8 * y_train
+    y_train = 0.3 * preds + 0.7 * y_train
     if not PREDICT:
         tmp['layer1_combine'] = preds
         tmp['newY'] = y_train
