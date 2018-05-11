@@ -107,7 +107,7 @@ def get_height_feature(trainset):
     mean_var.columns = ['TERMINALNO', 'HEIGHT_var_mean']
 
     height_feature = mean_height
-    height_feature = pd.merge(height_feature, max_height, on='TERMINALNO')
+    # height_feature = pd.merge(height_feature, max_height, on='TERMINALNO')
     # height_feature = pd.merge(height_feature, max_var, on='TERMINALNO')
     # height_feature = pd.merge(height_feature, min_height, on='TERMINALNO')
     # height_feature = pd.merge(height_feature, mean_var, on='TERMINALNO')
@@ -159,7 +159,7 @@ def make_train_set(trainset):
     x = speed
     x = pd.merge(x, direction, on='TERMINALNO')
     x = pd.merge(x, call, on='TERMINALNO')
-    # x = pd.merge(x, height, on='TERMINALNO')
+    x = pd.merge(x, height, on='TERMINALNO')
     x.set_index('TERMINALNO', inplace=True)
     # print("**************make set done**************")
     return x, y
@@ -184,7 +184,7 @@ def xgboost_model(x_train, y_train, x_test):
         'min_child_weight': 5,
         'gamma': 0,
         'subsample': 0.8,
-        'colsample_bytree': 0.6,
+        'colsample_bytree': 0.5,
         'scale_pos_weight': 1,
         'alpha': 1,
         'lambda': 2,
@@ -205,9 +205,9 @@ def layer1_xgb(train_x, test_x, train_y, test_y, test):
     param = {
         'max_depth': 3,
         'min_child_weight': 5,
-        'gamma': 0,
-        'subsample': 1,
-        'colsample_bytree': 1,
+        'gamma': 1,
+        'subsample': 0.8,
+        'colsample_bytree': 0.5,
         'scale_pos_weight': SCALE_POS_WEIGHT,
         'lambda': 2,
         'eta': 0.05,

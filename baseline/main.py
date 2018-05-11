@@ -214,6 +214,7 @@ y_pred = loaded_model.predict(df_test)
 # output result
 result = pd.DataFrame(test1['item'])
 result['pre'] = y_pred
+print(y_pred.var())
 result = result.rename(columns={'item':'Id','pre':'Pred'})
 result.to_csv(path_test_out,header=True,index=False)
 
