@@ -4,6 +4,7 @@ import csv
 import pandas as pd
 import numpy as np
 import xgboost as xgb
+import datetime
 # import lightgbm as lgb
 from sklearn import linear_model
 import gc 
@@ -110,7 +111,7 @@ def get_height_feature(trainset):
     # height_feature = pd.merge(height_feature, max_height, on='TERMINALNO')
     # height_feature = pd.merge(height_feature, max_var, on='TERMINALNO')
     # height_feature = pd.merge(height_feature, min_height, on='TERMINALNO')
-    # height_feature = pd.merge(height_feature, mean_var, on='TERMINALNO')
+    height_feature = pd.merge(height_feature, mean_var, on='TERMINALNO')
     # print(height_feature.head())
     return height_feature
 
@@ -123,13 +124,51 @@ def get_call_state_feature(trainset):
     """
     groupby_userid_tripid = trainset.groupby(['TERMINALNO'], as_index=False)
     count = groupby_userid_tripid['CALLSTATE'].agg({
-        # 'count0':lambda x: list(x).count(0) / len(x),
-        'count1': lambda x: list(x).count(1) / (len(x) - list(x).count(0) + 1),
-        'count2': lambda x: list(x).count(2) / (len(x) - list(x).count(0) + 1),
-        'count3': lambda x: list(x).count(3) / (len(x) - list(x).count(0) + 1),
-        # 'count4':lambda x: list(x).count(4) / len(x)
+        'count0': lambda x: list(x).count(0) / len(x),
+        'count1': lambda x: list(x).count(1) / (len(x)),
+        'count2': lambda x: list(x).count(2) / (len(x)),
+        'count3': lambda x: list(x).count(3) / (len(x)),
+        'count4': lambda x: list(x).count(4) / len(x)
     })
     return count
+
+
+def get_time_feature(trainset):
+    trainset['TIME'] = trainset['TIME'].apply(lambda x:datetime.datetime.fromtimestamp(x).hour)
+    groupby_userid = trainset.groupby('TERMINALNO', as_index=False)
+    time_feature = groupby_userid['TIME'].agg({
+        'hour0':lambda x: list(x).count(0) / len(x),
+        'hour1':lambda x: list(x).count(1) / len(x),
+        'hour2':lambda x: list(x).count(2) / len(x),
+        'hour3':lambda x: list(x).count(3) / len(x),
+        'hour4':lambda x: list(x).count(4) / len(x),
+        'hour5':lambda x: list(x).count(5) / len(x),
+        'hour6':lambda x: list(x).count(6) / len(x),
+        'hour7':lambda x: list(x).count(7) / len(x),
+        'hour8':lambda x: list(x).count(8) / len(x),
+        'hour9':lambda x: list(x).count(9) / len(x),
+        'hour10':lambda x: list(x).count(10) / len(x),
+        'hour11':lambda x: list(x).count(11) / len(x),
+        'hour12':lambda x: list(x).count(12) / len(x),
+        'hour13':lambda x: list(x).count(13) / len(x),
+        'hour14':lambda x: list(x).count(14) / len(x),
+        'hour15':lambda x: list(x).count(15) / len(x),
+        'hour16':lambda x: list(x).count(16) / len(x),
+        'hour17':lambda x: list(x).count(17) / len(x),
+        'hour18':lambda x: list(x).count(18) / len(x),
+        'hour19':lambda x: list(x).count(19) / len(x),
+        'hour20':lambda x: list(x).count(20) / len(x),
+        'hour21':lambda x: list(x).count(21) / len(x),
+        'hour22':lambda x: list(x).count(22) / len(x),
+        'hour23':lambda x: list(x).count(23) / len(x),
+    })
+    return time_feature
+
+
+def test_time_feature():
+    train, test = read_csv()
+    tmp = get_time_feature(train)
+    print(tmp.head())
 
 
 def get_Y(trainset):
@@ -149,11 +188,13 @@ def make_train_set(trainset):
     direction = get_direction_feature(trainset)
     call = get_call_state_feature(trainset)
     height = get_height_feature(trainset)
+    time_feat = get_time_feature(trainset)
     y = get_Y(trainset)
     x = speed
     x = pd.merge(x, direction, on='TERMINALNO')
     x = pd.merge(x, call, on='TERMINALNO')
     x = pd.merge(x, height, on='TERMINALNO')
+    x = pd.merge(x, time_feat, on='TERMINALNO')
     x.set_index('TERMINALNO', inplace=True)
     # print("**************make set done**************")
     return x, y
@@ -202,9 +243,9 @@ def layer1_xgb(train_x, test_x, train_y, test_y, test):
         'gamma': 1,
         'subsample': 1,
         'colsample_bytree': 0.4,
-        'scale_pos_weight': SCALE_POS_WEIGHT,
+        'scale_pos_weight': 1,
         'lambda': 2,
-        'eta': 0.05,
+        'eta': 0.01,
         'silent': 1,
         'objective': 'reg:linear'
     }
@@ -291,3 +332,4 @@ if __name__ == "__main__":
     print("****************** start **********************")
     # 程序入口
     make_submissin()
+    # test_time_feature()
