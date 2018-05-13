@@ -251,7 +251,7 @@ def xgboost_model(x_train, y_train, x_test):
         'lambda': 2,
         'eta': 0.05,
         'silent': 1,
-        'objective': 'reg:linear'
+        'objective': 'reg:linear',
     }
     num_round = 1000
     evallist = [(dtest, 'eval'), (dtrain, 'train')]
@@ -268,8 +268,9 @@ def layer1_xgb(train_x, test_x, train_y, test_y, test):
         'min_child_weight': 10,
         'gamma': 1,
         'subsample': 1,
-        'colsample_bytree': 0.4,
-        'scale_pos_weight': 1,
+        'colsample_bytree': 0.3,
+        'scale_pos_weight': 0.9,
+        'max_delta_step': 0,
         'lambda': 2,
         'eta': 0.01,
         'silent': 1,
@@ -284,7 +285,7 @@ def layer1_xgb(train_x, test_x, train_y, test_y, test):
     test = xgb.DMatrix(test)
     pred_test = model.predict(test)
     pred[pred < 0] = 0
-    # pred_test[pred_test < 0] = 0
+    pred_test[pred_test < 0] = 0
     return pred, pred_test
 
 
