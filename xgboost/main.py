@@ -116,6 +116,22 @@ def get_height_feature(trainset):
     return height_feature
 
 
+def get_gps_feature(trainset):
+    groupby_userid = trainset.groupby('TERMINALNO', as_index=False)
+    max_height = groupby_userid['HEIGHT'].max()
+    min_height = groupby_userid['HEIGHT'].min()
+    max_longitude = groupby_userid['LONGITUDE'].max()
+    min_longitude = groupby_userid['LONGITUDE'].min()
+    max_latitude = groupby_userid['LATITUDE'].max()
+    min_latitude = groupby_userid['LATITUDE'].min()
+    gps_feature = pd.merge(max_height, min_height, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, max_longitude, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, min_longitude, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, max_latitude, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, min_latitude, on='TERMINALNO')
+    return gps_feature
+
+
 def get_call_state_feature(trainset):
     """
     电话状态特征
@@ -189,12 +205,14 @@ def make_train_set(trainset):
     call = get_call_state_feature(trainset)
     height = get_height_feature(trainset)
     time_feat = get_time_feature(trainset)
+    gps_feat = get_gps_feature(trainset)
     y = get_Y(trainset)
     x = speed
     x = pd.merge(x, direction, on='TERMINALNO')
     x = pd.merge(x, call, on='TERMINALNO')
     x = pd.merge(x, height, on='TERMINALNO')
     x = pd.merge(x, time_feat, on='TERMINALNO')
+    x = pd.merge(x, gps_feat, on='TERMINALNO')
     x.set_index('TERMINALNO', inplace=True)
     # print("**************make set done**************")
     return x, y
