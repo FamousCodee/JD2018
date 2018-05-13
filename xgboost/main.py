@@ -132,6 +132,12 @@ def get_gps_feature(trainset):
     return gps_feature
 
 
+def get_trips_geature(trainset):
+    groupby_userid = trainset.groupby('TERMINALNO', as_index=False)
+    trip_num = groupby_userid['TRIP_ID'].max()
+    return trip_num
+
+
 def get_call_state_feature(trainset):
     """
     电话状态特征
@@ -206,6 +212,7 @@ def make_train_set(trainset):
     height = get_height_feature(trainset)
     time_feat = get_time_feature(trainset)
     gps_feat = get_gps_feature(trainset)
+    trip_feat = get_trips_geature(trainset)
     y = get_Y(trainset)
     x = speed
     x = pd.merge(x, direction, on='TERMINALNO')
@@ -213,6 +220,7 @@ def make_train_set(trainset):
     x = pd.merge(x, height, on='TERMINALNO')
     x = pd.merge(x, time_feat, on='TERMINALNO')
     x = pd.merge(x, gps_feat, on='TERMINALNO')
+    x = pd.merge(x, trip_feat, on='TERMINALNO')
     x.set_index('TERMINALNO', inplace=True)
     # print("**************make set done**************")
     return x, y
