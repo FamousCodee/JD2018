@@ -8,3 +8,4 @@ data/corr_online_train.csv
 data/tmp.csv
 .vscode/
 *.dat
+*.pyc
