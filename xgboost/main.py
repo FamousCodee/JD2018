@@ -31,12 +31,14 @@ def read_csv():
     # print("*****************read_csv*******************")
     # for filename in os.listdir(path_train):
     train = pd.read_csv(path_train)
+    # train = train[train['SPEED'] > 5]
     # train = train[(True ^ train['Y'].isin([0]))]
     nrow_train = train.shape[0]
-    test = pd.DataFrame()
+    # test = pd.DataFrame()
     # test = pd.read_csv(path_train)
     # if PREDICT:
     test = pd.read_csv(path_test)
+    # test = test[test['SPEED'] > 5]
     train = pd.concat([train, test], 0)
     # print(train)
     # train.columns = ["TERMINALNO", "TIME", "TRIP_ID", "LONGITUDE", "LATITUDE", "DIRECTION", "HEIGHT", "SPEED",
@@ -156,9 +158,9 @@ def get_call_state_feature(trainset):
 
 
 def get_time_feature(trainset):
-    trainset['TIME'] = trainset['TIME'].apply(lambda x:datetime.datetime.fromtimestamp(x).hour)
+    trainset['TIME1'] = trainset['TIME'].apply(lambda x:datetime.datetime.fromtimestamp(x).hour)
     groupby_userid = trainset.groupby('TERMINALNO', as_index=False)
-    time_feature = groupby_userid['TIME'].agg({
+    time_feature = groupby_userid['TIME1'].agg({
         'hour0':lambda x: list(x).count(0) / len(x),
         'hour1':lambda x: list(x).count(1) / len(x),
         'hour2':lambda x: list(x).count(2) / len(x),
@@ -191,6 +193,30 @@ def test_time_feature():
     train, test = read_csv()
     tmp = get_time_feature(train)
     print(tmp.head())
+    print(type(tmp))
+
+
+def get_weekday_feature(trainset):
+    trainset['TIME'] = trainset['TIME'].apply(lambda x:datetime.datetime.fromtimestamp(x).weekday())
+    groupby_userid_tripid = trainset.groupby(['TERMINALNO', 'TRIP_ID'], as_index=False)
+    groupby_userid = groupby_userid_tripid['TIME'].max().groupby(['TERMINALNO'], as_index=False)
+    week_feature = groupby_userid['TIME'].agg({
+        'mon':lambda x: list(x).count(0) / len(x),
+        'tue':lambda x: list(x).count(1) / len(x),
+        'wed':lambda x: list(x).count(2) / len(x),
+        'thu':lambda x: list(x).count(3) / len(x),
+        'fri':lambda x: list(x).count(4) / len(x),
+        'sat':lambda x: list(x).count(5) / len(x),
+        'sun':lambda x: list(x).count(6) / len(x),
+    })
+    return week_feature
+
+
+def test_weekday_feature():
+    train,test = read_csv()
+    tmp = get_weekday_feature(train)
+    print(tmp.head())
+    print(type(tmp))
 
 
 def get_Y(trainset):
@@ -213,6 +239,7 @@ def make_train_set(trainset):
     time_feat = get_time_feature(trainset)
     gps_feat = get_gps_feature(trainset)
     trip_feat = get_trips_geature(trainset)
+    weekday_feat = get_weekday_feature(trainset)
     y = get_Y(trainset)
     x = speed
     x = pd.merge(x, direction, on='TERMINALNO')
@@ -221,6 +248,7 @@ def make_train_set(trainset):
     x = pd.merge(x, time_feat, on='TERMINALNO')
     x = pd.merge(x, gps_feat, on='TERMINALNO')
     x = pd.merge(x, trip_feat, on='TERMINALNO')
+    x = pd.merge(x, weekday_feat, on='TERMINALNO')
     x.set_index('TERMINALNO', inplace=True)
     # print("**************make set done**************")
     return x, y
@@ -245,20 +273,21 @@ def xgboost_model(x_train, y_train, x_test):
         'min_child_weight': 5,
         'gamma': 0,
         'subsample': 0.8,
-        'colsample_bytree': 0.5,
-        'scale_pos_weight': 0.7,
+        'colsample_bytree': 0.6,
+        'scale_pos_weight': 1,
         'alpha': 1,
         'lambda': 2,
         'eta': 0.05,
         'silent': 1,
         'objective': 'reg:linear',
+        "seed":1123,        
     }
     num_round = 1000
     evallist = [(dtest, 'eval'), (dtrain, 'train')]
     model = xgb.train(param, dtrain, num_round, evals=evallist, early_stopping_rounds=10, verbose_eval=250)
     x_test = xgb.DMatrix(x_test)
     preds = model.predict(x_test)
-    # preds[preds < 0] = 0
+    preds[preds < 0] = 0
     return preds
 
 
@@ -268,13 +297,14 @@ def layer1_xgb(train_x, test_x, train_y, test_y, test):
         'min_child_weight': 5,
         'gamma': 1,
         'subsample': 1,
-        'colsample_bytree': 0.6,
-        'scale_pos_weight': SCALE_POS_WEIGHT,
+        'colsample_bytree': 1,
+        'scale_pos_weight': 0.9,
         'max_delta_step': 0,
-        'lambda': 2,
-        'eta': 0.01,
+        'lambda': 1,
+        'eta': 0.05,
         'silent': 1,
-        'objective': 'reg:linear'
+        'objective': 'reg:linear',
+        "seed":1123,
     }
     num_round = 1000
     dtrain = xgb.DMatrix(train_x, label=train_y)
@@ -340,7 +370,7 @@ def make_submissin():
     preds = xgboost_model(x_train, y_train, x_test)
     if not PREDICT:
         tmp['layer1_preds'] = layer1_preds
-    preds = (preds + layer1_preds) / 2
+    preds = 0.7*preds + 0.3*layer1_preds
     if not PREDICT:
         print("out tmp ")
         tmp['pred'] = preds
@@ -360,3 +390,4 @@ if __name__ == "__main__":
     # 程序入口
     make_submissin()
     # test_time_feature()
+    # test_weekday_feature()
