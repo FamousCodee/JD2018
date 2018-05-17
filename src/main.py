@@ -7,6 +7,7 @@ import lightgbm as lgb
 from sklearn import linear_model
 import gc 
 from sklearn.model_selection import train_test_split, cross_val_score
+import datetime
 
 if os.path.exists("./data/PINGAN-2018-train_demo.csv"):
     path_train = "./data/PINGAN-2018-train_demo.csv"
@@ -29,12 +30,14 @@ def read_csv():
     # print("*****************read_csv*******************")
     # for filename in os.listdir(path_train):
     train = pd.read_csv(path_train)
+    # train = train[train['SPEED'] > 5]
     # train = train[(True ^ train['Y'].isin([0]))]
     nrow_train = train.shape[0]
-    test = pd.DataFrame()
+    # test = pd.DataFrame()
     # test = pd.read_csv(path_train)
     # if PREDICT:
     test = pd.read_csv(path_test)
+    # test = test[test['SPEED'] > 5]
     train = pd.concat([train, test], 0)
     # print(train)
     # train.columns = ["TERMINALNO", "TIME", "TRIP_ID", "LONGITUDE", "LATITUDE", "DIRECTION", "HEIGHT", "SPEED",
@@ -65,11 +68,6 @@ def get_speed_feature(trainset):
     return speed_feature
 
 
-# def test_speed_feature():
-#     train, test = read_csv()
-#     print(get_speed_feature(train).head())
-
-
 def get_direction_feature(trainset):
     """
     方向处理：方差
@@ -87,9 +85,58 @@ def get_direction_feature(trainset):
     return direction_feature
 
 
-# def test_direction_feature():
-#     train, nrow_train = read_csv()
-#     print(get_direction_feature(train).head())
+def get_height_feature(trainset):
+    """
+    高度处理
+    :param trainset:
+    :return:
+    """
+    groupby_userid = trainset.groupby('TERMINALNO', as_index=False)
+
+    max_height = groupby_userid['HEIGHT'].max()
+    max_height.columns = ["TERMINALNO", "HEIGHT_max"]
+    min_height = groupby_userid['HEIGHT'].min()
+    min_height.columns = ['TERMINALNO', 'HEIGHT_min']
+    mean_height = groupby_userid['HEIGHT'].mean()
+    mean_height.columns = ["TERMINALNO", "HEIGHT_mean"]
+
+    groupby_userid_tripid = trainset.groupby(['TERMINALNO', 'TRIP_ID'], as_index=False)
+    max_var = groupby_userid_tripid['HEIGHT'].var().fillna(0).groupby('TERMINALNO', as_index=False)[
+        'HEIGHT'].max()
+    max_var.columns = ['TERMINALNO', 'HEIGHT_var_max']
+    mean_var = groupby_userid_tripid['HEIGHT'].var().fillna(0).groupby('TERMINALNO', as_index=False)[
+        'HEIGHT'].mean()
+    mean_var.columns = ['TERMINALNO', 'HEIGHT_var_mean']
+
+    height_feature = mean_height
+    # height_feature = pd.merge(height_feature, max_height, on='TERMINALNO')
+    # height_feature = pd.merge(height_feature, max_var, on='TERMINALNO')
+    # height_feature = pd.merge(height_feature, min_height, on='TERMINALNO')
+    height_feature = pd.merge(height_feature, mean_var, on='TERMINALNO')
+    # print(height_feature.head())
+    return height_feature
+
+
+def get_gps_feature(trainset):
+    groupby_userid = trainset.groupby('TERMINALNO', as_index=False)
+    max_height = groupby_userid['HEIGHT'].max()
+    min_height = groupby_userid['HEIGHT'].min()
+    max_longitude = groupby_userid['LONGITUDE'].max()
+    min_longitude = groupby_userid['LONGITUDE'].min()
+    max_latitude = groupby_userid['LATITUDE'].max()
+    min_latitude = groupby_userid['LATITUDE'].min()
+    gps_feature = pd.merge(max_height, min_height, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, max_longitude, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, min_longitude, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, max_latitude, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, min_latitude, on='TERMINALNO')
+    return gps_feature
+
+
+def get_trips_geature(trainset):
+    groupby_userid = trainset.groupby('TERMINALNO', as_index=False)
+    trip_num = groupby_userid['TRIP_ID'].max()
+    return trip_num
 
 
 def get_call_state_feature(trainset):
@@ -100,29 +147,75 @@ def get_call_state_feature(trainset):
     """
     groupby_userid_tripid = trainset.groupby(['TERMINALNO'], as_index=False)
     count = groupby_userid_tripid['CALLSTATE'].agg({
-        # 'count0':lambda x: list(x).count(0) / len(x),
-        'count1': lambda x: list(x).count(1) / (len(x) - list(x).count(0) + 1),
-        'count2': lambda x: list(x).count(2) / (len(x) - list(x).count(0) + 1),
-        'count3': lambda x: list(x).count(3) / (len(x) - list(x).count(0) + 1),
-        # 'count4':lambda x: list(x).count(4) / len(x)
+        'count0': lambda x: list(x).count(0) / len(x),
+        'count1': lambda x: list(x).count(1) / (len(x)),
+        'count2': lambda x: list(x).count(2) / (len(x)),
+        'count3': lambda x: list(x).count(3) / (len(x)),
+        'count4': lambda x: list(x).count(4) / len(x)
     })
     return count
 
 
-# def test_call_state_feature():
-#     train, test = read_csv()
-#     call = get_call_state_feature(train)
-#     print(call.head())
+def get_time_feature(trainset):
+    trainset['TIME1'] = trainset['TIME'].apply(lambda x:datetime.datetime.fromtimestamp(x).hour)
+    groupby_userid = trainset.groupby('TERMINALNO', as_index=False)
+    time_feature = groupby_userid['TIME1'].agg({
+        'hour0':lambda x: list(x).count(0) / len(x),
+        'hour1':lambda x: list(x).count(1) / len(x),
+        'hour2':lambda x: list(x).count(2) / len(x),
+        'hour3':lambda x: list(x).count(3) / len(x),
+        'hour4':lambda x: list(x).count(4) / len(x),
+        'hour5':lambda x: list(x).count(5) / len(x),
+        'hour6':lambda x: list(x).count(6) / len(x),
+        'hour7':lambda x: list(x).count(7) / len(x),
+        'hour8':lambda x: list(x).count(8) / len(x),
+        'hour9':lambda x: list(x).count(9) / len(x),
+        'hour10':lambda x: list(x).count(10) / len(x),
+        'hour11':lambda x: list(x).count(11) / len(x),
+        'hour12':lambda x: list(x).count(12) / len(x),
+        'hour13':lambda x: list(x).count(13) / len(x),
+        'hour14':lambda x: list(x).count(14) / len(x),
+        'hour15':lambda x: list(x).count(15) / len(x),
+        'hour16':lambda x: list(x).count(16) / len(x),
+        'hour17':lambda x: list(x).count(17) / len(x),
+        'hour18':lambda x: list(x).count(18) / len(x),
+        'hour19':lambda x: list(x).count(19) / len(x),
+        'hour20':lambda x: list(x).count(20) / len(x),
+        'hour21':lambda x: list(x).count(21) / len(x),
+        'hour22':lambda x: list(x).count(22) / len(x),
+        'hour23':lambda x: list(x).count(23) / len(x),
+    })
+    return time_feature
 
 
-def sigmoid(x):
-    s = 1 / (1 + np.exp(-x))
-    return s
+def test_time_feature():
+    train, test = read_csv()
+    tmp = get_time_feature(train)
+    print(tmp.head())
+    print(type(tmp))
 
 
-def unsigmoid(x):
-    s = np.log(x / (1 - x))
-    return s
+def get_weekday_feature(trainset):
+    trainset['TIME'] = trainset['TIME'].apply(lambda x:datetime.datetime.fromtimestamp(x).weekday())
+    groupby_userid_tripid = trainset.groupby(['TERMINALNO', 'TRIP_ID'], as_index=False)
+    groupby_userid = groupby_userid_tripid['TIME'].max().groupby(['TERMINALNO'], as_index=False)
+    week_feature = groupby_userid['TIME'].agg({
+        'mon':lambda x: list(x).count(0) / len(x),
+        'tue':lambda x: list(x).count(1) / len(x),
+        'wed':lambda x: list(x).count(2) / len(x),
+        'thu':lambda x: list(x).count(3) / len(x),
+        'fri':lambda x: list(x).count(4) / len(x),
+        'sat':lambda x: list(x).count(5) / len(x),
+        'sun':lambda x: list(x).count(6) / len(x),
+    })
+    return week_feature
+
+
+def test_weekday_feature():
+    train,test = read_csv()
+    tmp = get_weekday_feature(train)
+    print(tmp.head())
+    print(type(tmp))
 
 
 def get_Y(trainset):
@@ -131,20 +224,9 @@ def get_Y(trainset):
     :param trainset:
     :return:
     """
-    # print("******************get Y*******************")
     Y = trainset.groupby('TERMINALNO', as_index=False)['Y'].max()
     Y.columns = ['TERMINALNO', 'Y']
-    # Y['Y'] = Y['Y'] ** 2
-    # Y['Y'] = np.expm1(Y['Y'])
-    # Y['Y'] = np.log1p(Y['Y'])
-    # Y['Y'] = sigmoid(Y['Y'])
-    # print("***************get Y done*****************")
     return Y
-
-
-# def test_Y():
-#     train, nrow_train = read_csv()
-#     print(get_Y(train).head())
 
 
 def make_train_set(trainset):
@@ -152,14 +234,23 @@ def make_train_set(trainset):
     speed = get_speed_feature(trainset)
     direction = get_direction_feature(trainset)
     call = get_call_state_feature(trainset)
+    height = get_height_feature(trainset)
+    time_feat = get_time_feature(trainset)
+    gps_feat = get_gps_feature(trainset)
+    trip_feat = get_trips_geature(trainset)
+    weekday_feat = get_weekday_feature(trainset)
     y = get_Y(trainset)
     x = speed
     x = pd.merge(x, direction, on='TERMINALNO')
     x = pd.merge(x, call, on='TERMINALNO')
+    x = pd.merge(x, height, on='TERMINALNO')
+    x = pd.merge(x, time_feat, on='TERMINALNO')
+    x = pd.merge(x, gps_feat, on='TERMINALNO')
+    x = pd.merge(x, trip_feat, on='TERMINALNO')
+    x = pd.merge(x, weekday_feat, on='TERMINALNO')
     x.set_index('TERMINALNO', inplace=True)
     # print("**************make set done**************")
     return x, y
-
 
 
 
@@ -182,14 +273,21 @@ def lightgbm_make_submission():
     # print("**********************x_test********************")
     # print(x_test.head())
     # print("**********************x_test end****************")
-    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.1, random_state=0)
+    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.2, random_state=0)
     params = {
         'boosting': 'dart',
         'learning_rate': 0.005,
         'application': 'regression',
         'max_depth': -1,
-        'num_leaves': 200,
+        'num_leaves': 10,
         'verbosity': -1,
+        'feature_fraction': 0.5,
+        'feature_fraction_seed': 9,
+        'bagging_fraction': 0.8,
+        'bagging_freq': 5,
+        'bagging_seed': 9,
+        'min_data_in_leaf': 6,
+        'min_sum_hessian_in_leaf': 11,
         # 'metric': 'poisson',
         # 'min_data': 1,
         # 'min_data_in_bin': 1,
