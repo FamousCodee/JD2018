@@ -263,7 +263,7 @@ def ridge_model(x_train, y_train, x_test):
 
 
 def xgboost_model(x_train, y_train, x_test):
-    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.2)
+    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.5)
     dtrain = xgb.DMatrix(train_x, label=train_y)
     dtest = xgb.DMatrix(valid_x, label=valid_y)
     param = {
@@ -272,19 +272,19 @@ def xgboost_model(x_train, y_train, x_test):
         'max_depth': 3,
         'min_child_weight': 5,
         'gamma': 0,
-        'subsample': 0.8,
-        'colsample_bytree': 0.6,
+        'subsample': 1,
+        'colsample_bytree': 0.65,
         'scale_pos_weight': 1,
         'alpha': 1,
         'lambda': 2,
-        'eta': 0.05,
+        'eta': 0.1,
         'silent': 1,
         'objective': 'reg:linear',
         "seed":1123,        
     }
-    num_round = 1000
+    num_round = 250
     evallist = [(dtest, 'eval'), (dtrain, 'train')]
-    model = xgb.train(param, dtrain, num_round, evals=evallist, early_stopping_rounds=10, verbose_eval=250)
+    model = xgb.train(param, dtrain, num_round, evals=evallist, early_stopping_rounds=10, verbose_eval=10)
     x_test = xgb.DMatrix(x_test)
     preds = model.predict(x_test)
     preds[preds < 0] = 0
@@ -362,15 +362,15 @@ def make_submissin():
     # y_train = (preds1 + preds2) / 2
     # tmp['newY'] = y_train
     # SCALE_POS_WEIGHT = 1
-    preds, layer1_preds = five_fold_stacking(x_train, y_train, x_test)
-    y_train = 0.3 * preds + 0.7 * y_train
-    if not PREDICT:
-        tmp['layer1_combine'] = preds
-        tmp['newY'] = y_train
+    # preds, layer1_preds = five_fold_stacking(x_train, y_train, x_test)
+    # y_train = 0.3 * preds + 0.7 * y_train
+    # if not PREDICT:
+        # tmp['layer1_combine'] = preds
+        # tmp['newY'] = y_train
     preds = xgboost_model(x_train, y_train, x_test)
-    if not PREDICT:
-        tmp['layer1_preds'] = layer1_preds
-    preds = 0.7*preds + 0.3*layer1_preds
+    # if not PREDICT:
+        # tmp['layer1_preds'] = layer1_preds
+    # preds = 0.7*preds + 0.3*layer1_preds
     if not PREDICT:
         print("out tmp ")
         tmp['pred'] = preds
