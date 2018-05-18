@@ -9,6 +9,7 @@ import datetime
 from sklearn import linear_model
 import gc 
 from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.feature_selection import SelectPercentile, f_regression
 
 if os.path.exists("./data/PINGAN-2018-train_demo.csv"):
     path_train = "./data/PINGAN-2018-train_demo.csv"
@@ -273,7 +274,7 @@ def xgboost_model(x_train, y_train, x_test):
         'min_child_weight': 5,
         'gamma': 0,
         'subsample': 1,
-        'colsample_bytree': 0.65,
+        'colsample_bytree': 1,
         'scale_pos_weight': 1,
         'alpha': 1,
         'lambda': 2,
@@ -351,15 +352,20 @@ def make_submissin():
     SCALE_POS_WEIGHT = y0_size / y1_size
     x_test, y_test = make_train_set(test)
     y_train = y_train['Y']
+    # feature selection
+    sel = SelectPercentile(f_regression, 40)
+    x_train = sel.fit_transform(x_train, y_train)
+    x_test = sel.transform(x_test)
+    
     if not PREDICT:
         tmp = pd.DataFrame()
         tmp['rawY'] = y_train
-    # preds1 = xgboost_model(x_train, y_train, x_train)
+    preds1 = xgboost_model(x_train, y_train, x_train)
     # tmp['preds1'] = preds1
     # y_train = (y_train + preds1) / 2
-    # preds2 = xgboost_model(x_train, y_train, x_train)
+    preds2 = xgboost_model(x_train, y_train, x_train)
     # tmp['preds2'] = preds2
-    # y_train = (preds1 + preds2) / 2
+    y_train = (preds1 + preds2) / 2
     # tmp['newY'] = y_train
     # SCALE_POS_WEIGHT = 1
     # preds, layer1_preds = five_fold_stacking(x_train, y_train, x_test)
@@ -371,6 +377,7 @@ def make_submissin():
     # if not PREDICT:
         # tmp['layer1_preds'] = layer1_preds
     # preds = 0.7*preds + 0.3*layer1_preds
+    # preds = layer1_preds
     if not PREDICT:
         print("out tmp ")
         tmp['pred'] = preds
@@ -378,11 +385,11 @@ def make_submissin():
     y_test['Y'] = preds
     print(y_test['Y'].var())
     y_test.columns = ['TERMINALNO', 'Pred']
-    y_test.set_index('TERMINALNO', inplace=True)
-    x_test = pd.merge(x_test, y_test, left_index=True, right_index=True)
+    # y_test.set_index('TERMINALNO', inplace=True)
+    # x_test = pd.merge(x_test, y_test, left_index=True, right_index=True)
     # x_test.set_index('TERMINALNO', inplace=True)
     # print(x_test.head())
-    x_test.to_csv(path_test_out, columns=['Pred'], index=True, index_label=['Id'])
+    y_test.to_csv(path_test_out, columns=['Pred'], index=True, index_label=['Id'])
 
 
 if __name__ == "__main__":
