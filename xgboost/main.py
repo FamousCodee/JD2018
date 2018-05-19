@@ -190,13 +190,6 @@ def get_time_feature(trainset):
     return time_feature
 
 
-def test_time_feature():
-    train, test = read_csv()
-    tmp = get_time_feature(train)
-    print(tmp.head())
-    print(type(tmp))
-
-
 def get_weekday_feature(trainset):
     trainset['TIME'] = trainset['TIME'].apply(lambda x:datetime.datetime.fromtimestamp(x).weekday())
     groupby_userid_tripid = trainset.groupby(['TERMINALNO', 'TRIP_ID'], as_index=False)
@@ -211,13 +204,6 @@ def get_weekday_feature(trainset):
         'sun':lambda x: list(x).count(6) / len(x),
     })
     return week_feature
-
-
-def test_weekday_feature():
-    train,test = read_csv()
-    tmp = get_weekday_feature(train)
-    print(tmp.head())
-    print(type(tmp))
 
 
 def get_Y(trainset):
@@ -274,7 +260,7 @@ def xgboost_model(x_train, y_train, x_test):
         'min_child_weight': 5,
         'gamma': 0,
         'subsample': 1,
-        'colsample_bytree': 1,
+        'colsample_bytree': 0.8,
         'scale_pos_weight': 1,
         'alpha': 1,
         'lambda': 2,
@@ -353,7 +339,7 @@ def make_submissin():
     x_test, y_test = make_train_set(test)
     y_train = y_train['Y']
     # feature selection
-    sel = SelectPercentile(f_regression, 40)
+    sel = SelectPercentile(f_regression, 60)
     x_train = sel.fit_transform(x_train, y_train)
     x_test = sel.transform(x_test)
     
@@ -361,10 +347,12 @@ def make_submissin():
         tmp = pd.DataFrame()
         tmp['rawY'] = y_train
     preds1 = xgboost_model(x_train, y_train, x_train)
-    # tmp['preds1'] = preds1
+    if not PREDICT:
+        tmp['preds1'] = preds1
     # y_train = (y_train + preds1) / 2
     preds2 = xgboost_model(x_train, y_train, x_train)
-    # tmp['preds2'] = preds2
+    if not PREDICT:
+        tmp['preds2'] = preds2
     y_train = (preds1 + preds2) / 2
     # tmp['newY'] = y_train
     # SCALE_POS_WEIGHT = 1
