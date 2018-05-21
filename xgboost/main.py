@@ -127,11 +127,15 @@ def get_gps_feature(trainset):
     min_longitude = groupby_userid['LONGITUDE'].min()
     max_latitude = groupby_userid['LATITUDE'].max()
     min_latitude = groupby_userid['LATITUDE'].min()
+    mean_longitude = groupby_userid['LONGITUDE'].mean()
+    mean_latitude = groupby_userid['LATITUDE'].mean()
     gps_feature = pd.merge(max_height, min_height, on='TERMINALNO')
     gps_feature = pd.merge(gps_feature, max_longitude, on='TERMINALNO')
     gps_feature = pd.merge(gps_feature, min_longitude, on='TERMINALNO')
     gps_feature = pd.merge(gps_feature, max_latitude, on='TERMINALNO')
     gps_feature = pd.merge(gps_feature, min_latitude, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, mean_latitude, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, mean_longitude, on='TERMINALNO')
     return gps_feature
 
 
@@ -250,7 +254,7 @@ def ridge_model(x_train, y_train, x_test):
 
 
 def xgboost_model(x_train, y_train, x_test):
-    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.5)
+    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.4)
     dtrain = xgb.DMatrix(train_x, label=train_y)
     dtest = xgb.DMatrix(valid_x, label=valid_y)
     param = {
@@ -339,7 +343,7 @@ def make_submissin():
     x_test, y_test = make_train_set(test)
     y_train = y_train['Y']
     # feature selection
-    sel = SelectPercentile(f_regression, 60)
+    sel = SelectPercentile(f_regression, 40)
     x_train = sel.fit_transform(x_train, y_train)
     x_test = sel.transform(x_test)
     
