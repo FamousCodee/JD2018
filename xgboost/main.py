@@ -7,6 +7,7 @@ import xgboost as xgb
 import datetime
 # import lightgbm as lgb
 from sklearn import linear_model
+from sklearn.model_selection import GridSearchCV
 import gc 
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.feature_selection import SelectPercentile, f_regression
@@ -254,7 +255,7 @@ def ridge_model(x_train, y_train, x_test):
 
 
 def xgboost_model(x_train, y_train, x_test):
-    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.4)
+    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.2)
     dtrain = xgb.DMatrix(train_x, label=train_y)
     dtest = xgb.DMatrix(valid_x, label=valid_y)
     param = {
@@ -273,13 +274,42 @@ def xgboost_model(x_train, y_train, x_test):
         'objective': 'reg:linear',
         "seed":1123,        
     }
-    num_round = 250
+    num_round = 100
     evallist = [(dtest, 'eval'), (dtrain, 'train')]
     model = xgb.train(param, dtrain, num_round, evals=evallist, early_stopping_rounds=10, verbose_eval=10)
     x_test = xgb.DMatrix(x_test)
     preds = model.predict(x_test)
     preds[preds < 0] = 0
     return preds
+
+
+def xgb_sklearn_model(x_train, y_train, x_test):
+    model = xgb.XGBRegressor()
+    params_grid = {
+        "n_estimators": [50, 100, 150, 200, 250], 
+        "learning_rate": [0.01, 0.02, 0.03, 0.04, 0.05], 
+        "max_depth": [3, 4, 5, 6, 7] 
+    }
+    grid_search = GridSearchCV(estimator=model, param_grid=params_grid, cv=3, scoring="neg_mean_squared_error")
+    grid_search.fit(X=x_train, y=y_train)
+    print(grid_search.best_params_)
+
+
+def test_xgb_sklearn_model():
+    train, test = read_csv()
+    x_train, y_train = make_train_set(train)
+    y0_size = y_train[y_train['Y'] == 0].shape[0]
+    y1_size = y_train[y_train['Y'] > 0].shape[0]
+    print("{0: f} \t {1: f}".format(y0_size, y1_size))
+    global SCALE_POS_WEIGHT
+    SCALE_POS_WEIGHT = y0_size / y1_size
+    x_test, y_test = make_train_set(test)
+    y_train = y_train['Y']
+    # feature selection
+    sel = SelectPercentile(f_regression, 40)
+    x_train = sel.fit_transform(x_train, y_train)
+    x_test = sel.transform(x_test)
+    xgb_sklearn_model(x_train, y_train, x_test)
 
 
 def layer1_xgb(train_x, test_x, train_y, test_y, test):
@@ -387,6 +417,7 @@ def make_submissin():
 if __name__ == "__main__":
     print("****************** start **********************")
     # 程序入口
-    make_submissin()
+    # make_submissin()
     # test_time_feature()
     # test_weekday_feature()
+    test_xgb_sklearn_model()
