@@ -11,6 +11,7 @@ from sklearn.model_selection import GridSearchCV
 import gc 
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.feature_selection import SelectPercentile, f_regression
+from math import radians, cos, sin, asin, sqrt
 
 if os.path.exists("./data/PINGAN-2018-train_demo.csv"):
     path_train = "./data/PINGAN-2018-train_demo.csv"
@@ -120,7 +121,24 @@ def get_height_feature(trainset):
     return height_feature
 
 
+def haversine1(lon1, lat1, lon2, lat2):  # 经度1，纬度1，经度2，纬度2 （十进制度数）
+    """
+    Calculate the great circle distance between two points
+    on the earth (specified in decimal degrees)
+    """
+    # 将十进制度数转化为弧度
+    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+    # haversine公式
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+    c = 2 * asin(sqrt(a))
+    r = 6371  # 地球平均半径，单位为公里
+    return c * r * 1000
+
+
 def get_gps_feature(trainset):
+    trainset['hdis'] = trainset.apply(lambda x: haversine1(x['LONGITUDE'], x['LATITUDE'], 113.9177317,22.54334333), axis=1)    
     groupby_userid = trainset.groupby('TERMINALNO', as_index=False)
     max_height = groupby_userid['HEIGHT'].max()
     min_height = groupby_userid['HEIGHT'].min()
@@ -130,6 +148,9 @@ def get_gps_feature(trainset):
     min_latitude = groupby_userid['LATITUDE'].min()
     mean_longitude = groupby_userid['LONGITUDE'].mean()
     mean_latitude = groupby_userid['LATITUDE'].mean()
+    dis_mean = groupby_userid['hdis'].mean()
+    dis_min = groupby_userid['hdis'].min()
+    dis_max = groupby_userid['hdis'].max()
     gps_feature = pd.merge(max_height, min_height, on='TERMINALNO')
     gps_feature = pd.merge(gps_feature, max_longitude, on='TERMINALNO')
     gps_feature = pd.merge(gps_feature, min_longitude, on='TERMINALNO')
@@ -137,6 +158,9 @@ def get_gps_feature(trainset):
     gps_feature = pd.merge(gps_feature, min_latitude, on='TERMINALNO')
     gps_feature = pd.merge(gps_feature, mean_latitude, on='TERMINALNO')
     gps_feature = pd.merge(gps_feature, mean_longitude, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, dis_mean, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, dis_min, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, dis_max, on='TERMINALNO')
     return gps_feature
 
 
@@ -286,13 +310,29 @@ def xgboost_model(x_train, y_train, x_test):
 def xgb_sklearn_model(x_train, y_train, x_test):
     model = xgb.XGBRegressor()
     params_grid = {
-        "n_estimators": [50, 100, 150, 200, 250], 
-        "learning_rate": [0.01, 0.02, 0.03, 0.04, 0.05], 
-        "max_depth": [3, 4, 5, 6, 7] 
+        "n_estimators": [50, 200, 400, 600, 800], 
+        "learning_rate": [0.01], 
+        "max_depth": [3],
+        "min_child_weight": [1, 5, 10, 20],
+        "subsample": [1.0],
+        "colsample_bytree": [0.9],
+        "scale_pos_weight": [1, 0.9, 1.1],
     }
-    grid_search = GridSearchCV(estimator=model, param_grid=params_grid, cv=3, scoring="neg_mean_squared_error")
+    grid_search = GridSearchCV(estimator=model, 
+        param_grid=params_grid, 
+        cv=3, 
+        scoring="explained_variance",
+        n_jobs=2)
     grid_search.fit(X=x_train, y=y_train)
     print(grid_search.best_params_)
+
+
+def xgb_sklearn_submission_model(x_train, y_train, x_test):
+    model = xgb.XGBRegressor(max_depth=3, learning_rate=0.01, n_estimators=150,
+        min_child_weight=5, subsample=1, colsample_bytree=0.9)
+    model.fit(x_train, y_train)
+    preds = model.predict(x_test)
+    return preds
 
 
 def test_xgb_sklearn_model():
@@ -376,18 +416,20 @@ def make_submissin():
     sel = SelectPercentile(f_regression, 40)
     x_train = sel.fit_transform(x_train, y_train)
     x_test = sel.transform(x_test)
+    preds = xgb_sklearn_submission_model(x_train, y_train, x_test)
     
     if not PREDICT:
         tmp = pd.DataFrame()
         tmp['rawY'] = y_train
-    preds1 = xgboost_model(x_train, y_train, x_train)
-    if not PREDICT:
-        tmp['preds1'] = preds1
-    # y_train = (y_train + preds1) / 2
-    preds2 = xgboost_model(x_train, y_train, x_train)
-    if not PREDICT:
-        tmp['preds2'] = preds2
-    y_train = (preds1 + preds2) / 2
+    # preds1 = xgboost_model(x_train, y_train, x_train)
+    # if not PREDICT:
+    #     tmp['preds1'] = preds1
+    # # y_train = (y_train + preds1) / 2
+    # preds2 = xgboost_model(x_train, y_train, x_train)
+    # if not PREDICT:
+    #     tmp['preds2'] = preds2
+    # y_train = (preds1 + preds2) / 2
+    
     # tmp['newY'] = y_train
     # SCALE_POS_WEIGHT = 1
     # preds, layer1_preds = five_fold_stacking(x_train, y_train, x_test)
@@ -395,7 +437,7 @@ def make_submissin():
     # if not PREDICT:
         # tmp['layer1_combine'] = preds
         # tmp['newY'] = y_train
-    preds = xgboost_model(x_train, y_train, x_test)
+    # preds = xgboost_model(x_train, y_train, x_test)
     # if not PREDICT:
         # tmp['layer1_preds'] = layer1_preds
     # preds = 0.7*preds + 0.3*layer1_preds
@@ -417,7 +459,7 @@ def make_submissin():
 if __name__ == "__main__":
     print("****************** start **********************")
     # 程序入口
-    # make_submissin()
+    make_submissin()
     # test_time_feature()
     # test_weekday_feature()
-    test_xgb_sklearn_model()
+    # test_xgb_sklearn_model()
