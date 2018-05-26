@@ -328,8 +328,8 @@ def xgb_sklearn_model(x_train, y_train, x_test):
 
 
 def xgb_sklearn_submission_model(x_train, y_train, x_test):
-    model = xgb.XGBRegressor(max_depth=3, learning_rate=0.01, n_estimators=150,
-        min_child_weight=5, subsample=1, colsample_bytree=0.9)
+    model = xgb.XGBRegressor(max_depth=3, learning_rate=0.01, n_estimators=200,
+        min_child_weight=5, subsample=1, colsample_bytree=0.9, scale_pos_weight=1.1)
     model.fit(x_train, y_train)
     preds = model.predict(x_test)
     return preds
@@ -346,7 +346,7 @@ def test_xgb_sklearn_model():
     x_test, y_test = make_train_set(test)
     y_train = y_train['Y']
     # feature selection
-    sel = SelectPercentile(f_regression, 40)
+    sel = SelectPercentile(f_regression, 50)
     x_train = sel.fit_transform(x_train, y_train)
     x_test = sel.transform(x_test)
     xgb_sklearn_model(x_train, y_train, x_test)
@@ -449,7 +449,7 @@ def make_submissin():
     y_test['Y'] = preds
     print(y_test['Y'].var())
     y_test.columns = ['TERMINALNO', 'Pred']
-    # y_test.set_index('TERMINALNO', inplace=True)
+    y_test.set_index('TERMINALNO', inplace=True)
     # x_test = pd.merge(x_test, y_test, left_index=True, right_index=True)
     # x_test.set_index('TERMINALNO', inplace=True)
     # print(x_test.head())
