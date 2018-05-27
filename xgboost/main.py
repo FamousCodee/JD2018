@@ -72,6 +72,26 @@ def get_speed_feature(trainset):
     return speed_feature
 
 
+def get_acceleration_feature(trainset):
+    groupby_userid_tripid = trainset.groupby(['TERMINALNO', 'TRIP_ID'])
+    trainset['SPEED_diff'] = groupby_userid_tripid['SPEED'].diff().fillna(0)
+    groupby_userid_tripid = trainset.groupby('TERMINALNO', as_index=False)
+    max_acc = groupby_userid_tripid['SPEED_diff'].max()
+    max_acc.columns = ['TERMINALNO', 'max_acc']
+    min_acc = groupby_userid_tripid['SPEED_diff'].min()
+    min_acc.columns = ['TERMINALNO', 'min_acc']    
+    mean_acc = groupby_userid_tripid['SPEED_diff'].mean()
+    mean_acc.columns = ['TERMINALNO', 'mean_acc']
+    acc_feature = pd.merge(max_acc, min_acc, on='TERMINALNO')
+    acc_feature = pd.merge(acc_feature, mean_acc, on='TERMINALNO')
+    # print(acc_feature)
+    return acc_feature
+
+def test_get_acceleration_feature():
+    train, test = read_csv()
+    get_acceleration_feature(train)
+
+
 def get_direction_feature(trainset):
     """
     方向处理：方差
@@ -114,7 +134,7 @@ def get_height_feature(trainset):
 
     height_feature = mean_height
     # height_feature = pd.merge(height_feature, max_height, on='TERMINALNO')
-    # height_feature = pd.merge(height_feature, max_var, on='TERMINALNO')
+    height_feature = pd.merge(height_feature, max_var, on='TERMINALNO')
     # height_feature = pd.merge(height_feature, min_height, on='TERMINALNO')
     height_feature = pd.merge(height_feature, mean_var, on='TERMINALNO')
     # print(height_feature.head())
@@ -162,6 +182,12 @@ def get_gps_feature(trainset):
     gps_feature = pd.merge(gps_feature, dis_min, on='TERMINALNO')
     gps_feature = pd.merge(gps_feature, dis_max, on='TERMINALNO')
     return gps_feature
+
+
+def test_gps_feature():
+    train, test = read_csv()
+    gps = get_gps_feature(train)
+    print(gps)
 
 
 def get_trips_geature(trainset):
@@ -256,6 +282,7 @@ def make_train_set(trainset):
     gps_feat = get_gps_feature(trainset)
     trip_feat = get_trips_geature(trainset)
     weekday_feat = get_weekday_feature(trainset)
+    acc_feat = get_acceleration_feature(trainset)
     y = get_Y(trainset)
     x = speed
     x = pd.merge(x, direction, on='TERMINALNO')
@@ -265,6 +292,7 @@ def make_train_set(trainset):
     x = pd.merge(x, gps_feat, on='TERMINALNO')
     x = pd.merge(x, trip_feat, on='TERMINALNO')
     x = pd.merge(x, weekday_feat, on='TERMINALNO')
+    x = pd.merge(x, acc_feat, on='TERMINALNO')
     x.set_index('TERMINALNO', inplace=True)
     # print("**************make set done**************")
     return x, y
@@ -329,7 +357,7 @@ def xgb_sklearn_model(x_train, y_train, x_test):
 
 def xgb_sklearn_submission_model(x_train, y_train, x_test):
     model = xgb.XGBRegressor(max_depth=3, learning_rate=0.01, n_estimators=200,
-        min_child_weight=5, subsample=1, colsample_bytree=0.9, scale_pos_weight=2.0)
+        min_child_weight=5, subsample=0.8, colsample_bytree=0.8, scale_pos_weight=2.0)
     model.fit(x_train, y_train)
     preds = model.predict(x_test)
     return preds
@@ -411,9 +439,9 @@ def make_submissin():
     global SCALE_POS_WEIGHT
     SCALE_POS_WEIGHT = y0_size / y1_size
     x_test, y_test = make_train_set(test)
-    y_train = y_train['Y']
+    y_train = 10 * y_train['Y']
     # feature selection
-    sel = SelectPercentile(f_regression, 40)
+    sel = SelectPercentile(f_regression, 70)
     x_train = sel.fit_transform(x_train, y_train)
     x_test = sel.transform(x_test)
     preds = xgb_sklearn_submission_model(x_train, y_train, x_test)
@@ -463,3 +491,5 @@ if __name__ == "__main__":
     # test_time_feature()
     # test_weekday_feature()
     # test_xgb_sklearn_model()
+    # test_get_acceleration_feature()
+    # test_gps_feature()
