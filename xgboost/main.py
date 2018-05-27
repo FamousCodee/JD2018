@@ -329,7 +329,7 @@ def xgb_sklearn_model(x_train, y_train, x_test):
 
 def xgb_sklearn_submission_model(x_train, y_train, x_test):
     model = xgb.XGBRegressor(max_depth=3, learning_rate=0.01, n_estimators=200,
-        min_child_weight=5, subsample=1, colsample_bytree=0.9, scale_pos_weight=1.1)
+        min_child_weight=5, subsample=1, colsample_bytree=0.9, scale_pos_weight=2.0)
     model.fit(x_train, y_train)
     preds = model.predict(x_test)
     return preds
