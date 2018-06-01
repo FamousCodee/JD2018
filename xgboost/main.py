@@ -82,8 +82,11 @@ def get_acceleration_feature(trainset):
     min_acc.columns = ['TERMINALNO', 'min_acc']    
     mean_acc = groupby_userid_tripid['SPEED_diff'].mean()
     mean_acc.columns = ['TERMINALNO', 'mean_acc']
+    var_acc = groupby_userid_tripid['SPEED_diff'].var().fillna(0)
+    var_acc.columns = ['TERMINALNO', 'var_acc']    
     acc_feature = pd.merge(max_acc, min_acc, on='TERMINALNO')
     acc_feature = pd.merge(acc_feature, mean_acc, on='TERMINALNO')
+    acc_feature = pd.merge(acc_feature, var_acc, on='TERMINALNO')
     # print(acc_feature)
     return acc_feature
 
@@ -321,30 +324,29 @@ def xgboost_model(x_train, y_train, x_test):
         'scale_pos_weight': 1,
         'alpha': 1,
         'lambda': 2,
-        'eta': 0.1,
+        'eta': 0.01,
         'silent': 1,
         'objective': 'reg:linear',
-        "seed":1123,        
+        'eval_metric': 'mae',
     }
-    num_round = 100
+    num_round = 200
     evallist = [(dtest, 'eval'), (dtrain, 'train')]
-    model = xgb.train(param, dtrain, num_round, evals=evallist, early_stopping_rounds=10, verbose_eval=10)
+    model = xgb.train(param, dtrain, num_round, evals=evallist, verbose_eval=10)
     x_test = xgb.DMatrix(x_test)
     preds = model.predict(x_test)
-    preds[preds < 0] = 0
     return preds
 
 
 def xgb_sklearn_model(x_train, y_train, x_test):
     model = xgb.XGBRegressor()
     params_grid = {
-        "n_estimators": [50, 200, 400, 600, 800], 
+        "n_estimators": [150, 200, 250, 300, 350], 
         "learning_rate": [0.01], 
         "max_depth": [3],
-        "min_child_weight": [1, 5, 10, 20],
-        "subsample": [1.0],
-        "colsample_bytree": [0.9],
-        "scale_pos_weight": [1, 0.9, 1.1],
+        "min_child_weight": [5],
+        "subsample": [0.7, 0.8, 0.9, 1.0],
+        "colsample_bytree": [0.7, 0.8, 0.9, 1.0],
+        "scale_pos_weight": [1],
     }
     grid_search = GridSearchCV(estimator=model, 
         param_grid=params_grid, 
@@ -357,7 +359,7 @@ def xgb_sklearn_model(x_train, y_train, x_test):
 
 def xgb_sklearn_submission_model(x_train, y_train, x_test):
     model = xgb.XGBRegressor(max_depth=3, learning_rate=0.01, n_estimators=200,
-        min_child_weight=5, subsample=0.8, colsample_bytree=0.8, scale_pos_weight=2.0)
+        min_child_weight=4, subsample=0.8, colsample_bytree=0.8, scale_pos_weight=2)
     model.fit(x_train, y_train)
     preds = model.predict(x_test)
     return preds
@@ -444,11 +446,11 @@ def make_submissin():
     sel = SelectPercentile(f_regression, 70)
     x_train = sel.fit_transform(x_train, y_train)
     x_test = sel.transform(x_test)
-    preds = xgb_sklearn_submission_model(x_train, y_train, x_test)
-    
-    if not PREDICT:
-        tmp = pd.DataFrame()
-        tmp['rawY'] = y_train
+    # preds = xgb_sklearn_submission_model(x_train, y_train, x_test)
+    preds = xgboost_model(x_train, y_train, x_test)
+    # if not PREDICT:
+    #     tmp = pd.DataFrame()
+    #     tmp['rawY'] = y_train
     # preds1 = xgboost_model(x_train, y_train, x_train)
     # if not PREDICT:
     #     tmp['preds1'] = preds1
@@ -470,10 +472,10 @@ def make_submissin():
         # tmp['layer1_preds'] = layer1_preds
     # preds = 0.7*preds + 0.3*layer1_preds
     # preds = layer1_preds
-    if not PREDICT:
-        print("out tmp ")
-        tmp['pred'] = preds
-        tmp.to_csv('./data/tmp.csv')
+    # if not PREDICT:
+    #     print("out tmp ")
+    #     tmp['pred'] = preds
+    #     tmp.to_csv('./data/tmp.csv')
     y_test['Y'] = preds
     print(y_test['Y'].var())
     y_test.columns = ['TERMINALNO', 'Pred']
