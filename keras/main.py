@@ -216,20 +216,6 @@ def get_call_state_feature(trainset):
     return count
 
 
-def get_time_duration_feature(trainset):
-    groupby_userid_tripid = trainset.groupby(['TERMINALNO', 'TRIP_ID'], as_index=False)
-    # time_max = groupby_userid_tripid['TIME'].max()
-    # time_min = groupby_userid_tripid['TIME'].min()
-    time_delte = groupby_userid_tripid['TIME'].agg({'time_delta': lambda x: x.max() - x.min()})
-    # print(time_delte)
-    time_duration_max = time_delte.groupby('TERMINALNO', as_index=False)['time_delta'].max()
-    time_duration_mean = time_delte.groupby('TERMINALNO', as_index=False)['time_delta'].mean()
-    time_duration_feature = pd.merge(time_duration_max, time_duration_mean, on='TERMINALNO')
-    time_duration_feature.columns = ['TERMINALNO', 'time_duration_max', 'time_duration_mean']
-    # print(time_duration_feature)
-    return time_duration_feature
-
-
 def get_time_feature(trainset):
     trainset['TIME1'] = trainset['TIME'].apply(lambda x:datetime.datetime.fromtimestamp(x).hour)
     groupby_userid = trainset.groupby('TERMINALNO', as_index=False)
@@ -295,7 +281,6 @@ def make_train_set(trainset):
     direction = get_direction_feature(trainset)
     call = get_call_state_feature(trainset)
     height = get_height_feature(trainset)
-    time_duration_feat = get_time_duration_feature(trainset)    
     time_feat = get_time_feature(trainset)
     gps_feat = get_gps_feature(trainset)
     trip_feat = get_trips_geature(trainset)
@@ -311,141 +296,36 @@ def make_train_set(trainset):
     x = pd.merge(x, trip_feat, on='TERMINALNO')
     x = pd.merge(x, weekday_feat, on='TERMINALNO')
     x = pd.merge(x, acc_feat, on='TERMINALNO')
-    x = pd.merge(x, time_duration_feat, on='TERMINALNO')
     x.set_index('TERMINALNO', inplace=True)
     # print("**************make set done**************")
     return x, y
 
 
-def ridge_model(x_train, y_train, x_test):
-    model = linear_model.Ridge()
-    model.fit(x_train, y_train)
-    preds = model.predict(x_test)
-    preds[preds < 0] = 0
+def keras_model(x_train, y_train, x_test):
+    from keras.models import Sequential
+    from keras.layers import Dense, Activation
+    model = Sequential([
+        Dense(100, input_shape=(x_train.shape[1],)),
+        Activation('relu'),
+        Dense(100),
+        Activation('relu'),
+        Dense(100),
+        Activation('relu'),
+        Dense(100),
+        Activation('relu'),
+        Dense(100),
+        Activation('relu'),
+        Dense(100),
+        Activation('relu'),
+        Dense(1),
+        Activation('linear'),
+    ])
+    model.compile(optimizer='rmsprop',
+        loss='mse')
+    model.fit(x_train, y_train, batch_size=32, epochs=10000)
+    preds = model.predict(x_test, batch_size=32)
+    # print(preds)
     return preds
-
-
-def xgboost_model(x_train, y_train, x_test):
-    train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.2)
-    dtrain = xgb.DMatrix(train_x, label=train_y)
-    dtest = xgb.DMatrix(valid_x, label=valid_y)
-    param = {
-        # 'learning_rate': 0.05,
-        # 'n_estimator': 1000,
-        'max_depth': 3,
-        'min_child_weight': 5,
-        'gamma': 0,
-        'subsample': 1,
-        'colsample_bytree': 0.8,
-        'scale_pos_weight': 1,
-        'alpha': 1,
-        'lambda': 2,
-        'eta': 0.01,
-        'silent': 1,
-        'objective': 'reg:linear',
-        'eval_metric': 'mae',
-    }
-    num_round = 200
-    evallist = [(dtest, 'eval'), (dtrain, 'train')]
-    model = xgb.train(param, dtrain, num_round, evals=evallist, verbose_eval=10)
-    x_test = xgb.DMatrix(x_test)
-    preds = model.predict(x_test)
-    return preds
-
-
-def xgb_sklearn_model(x_train, y_train, x_test):
-    model = xgb.XGBRegressor()
-    params_grid = {
-        "n_estimators": [150, 200, 250, 300, 350], 
-        "learning_rate": [0.01], 
-        "max_depth": [3],
-        "min_child_weight": [5],
-        "subsample": [0.7, 0.8, 0.9, 1.0],
-        "colsample_bytree": [0.7, 0.8, 0.9, 1.0],
-        "scale_pos_weight": [1],
-    }
-    grid_search = GridSearchCV(estimator=model, 
-        param_grid=params_grid, 
-        cv=3, 
-        scoring="explained_variance",
-        n_jobs=2)
-    grid_search.fit(X=x_train, y=y_train)
-    print(grid_search.best_params_)
-
-
-def xgb_sklearn_submission_model(x_train, y_train, x_test):
-    model = xgb.XGBRegressor(max_depth=3, learning_rate=0.01, n_estimators=200,
-        min_child_weight=4, subsample=0.8, colsample_bytree=0.8, scale_pos_weight=2)
-    model.fit(x_train, y_train)
-    preds = model.predict(x_test)
-    return preds
-
-
-def test_xgb_sklearn_model():
-    train, test = read_csv()
-    x_train, y_train = make_train_set(train)
-    y0_size = y_train[y_train['Y'] == 0].shape[0]
-    y1_size = y_train[y_train['Y'] > 0].shape[0]
-    print("{0: f} \t {1: f}".format(y0_size, y1_size))
-    global SCALE_POS_WEIGHT
-    SCALE_POS_WEIGHT = y0_size / y1_size
-    x_test, y_test = make_train_set(test)
-    y_train = y_train['Y']
-    # feature selection
-    sel = SelectPercentile(f_regression, 50)
-    x_train = sel.fit_transform(x_train, y_train)
-    x_test = sel.transform(x_test)
-    xgb_sklearn_model(x_train, y_train, x_test)
-
-
-def layer1_xgb(train_x, test_x, train_y, test_y, test):
-    param = {
-        'max_depth': 3,
-        'min_child_weight': 5,
-        'gamma': 1,
-        'subsample': 1,
-        'colsample_bytree': 1,
-        'scale_pos_weight': 0.9,
-        'max_delta_step': 0,
-        'lambda': 1,
-        'eta': 0.05,
-        'silent': 1,
-        'objective': 'reg:linear',
-        "seed":1123,
-    }
-    num_round = 1000
-    dtrain = xgb.DMatrix(train_x, label=train_y)
-    dtest = xgb.DMatrix(test_x, label=test_y)
-    evallist = [(dtest, 'eval'), (dtrain, 'train')]
-    model = xgb.train(param, dtrain, num_round, evals=evallist, early_stopping_rounds=10, verbose_eval=250)
-    pred = model.predict(dtest)
-    test = xgb.DMatrix(test)
-    pred_test = model.predict(test)
-    pred[pred < 0] = 0
-    pred_test[pred_test < 0] = 0
-    return pred, pred_test
-
-
-def five_fold_stacking(x_train, y_train, x_test):
-    n = x_train.shape[0] // 5
-    preds = np.array([])
-    layer1_average_pred_test = np.zeros(x_test.shape[0])
-    for i in range(5):
-        x1 = x_train[i*n: (i + 1) *n]
-        y1 = y_train[i*n: (i + 1) *n]
-        if not PREDICT:
-            x = x_train.drop(index=list(np.arange(i * n + 1, (i + 1) * n + 1)))
-        else:
-            x = x_train.drop(index=list(np.arange(i * n, (i + 1) * n)))
-        y = y_train.drop(index=np.arange(i*n, (i + 1) *n))
-        pred, pred_test = layer1_xgb(train_x=x, test_x=x1, train_y=y, test_y=y1, test=x_test)
-        preds = np.append(preds, pred)
-        layer1_average_pred_test += pred_test
-    layer1_average_pred_test /= 5
-    return preds, layer1_average_pred_test
-
-
-SCALE_POS_WEIGHT = 0.0
 
 
 def make_submissin():
@@ -462,43 +342,13 @@ def make_submissin():
     sel = SelectPercentile(f_regression, 70)
     x_train = sel.fit_transform(x_train, y_train)
     x_test = sel.transform(x_test)
-    # preds = xgb_sklearn_submission_model(x_train, y_train, x_test)
-    preds = xgboost_model(x_train, y_train, x_test)
-    # if not PREDICT:
-    #     tmp = pd.DataFrame()
-    #     tmp['rawY'] = y_train
-    # preds1 = xgboost_model(x_train, y_train, x_train)
-    # if not PREDICT:
-    #     tmp['preds1'] = preds1
-    # # y_train = (y_train + preds1) / 2
-    # preds2 = xgboost_model(x_train, y_train, x_train)
-    # if not PREDICT:
-    #     tmp['preds2'] = preds2
-    # y_train = (preds1 + preds2) / 2
-    
-    # tmp['newY'] = y_train
-    # SCALE_POS_WEIGHT = 1
-    # preds, layer1_preds = five_fold_stacking(x_train, y_train, x_test)
-    # y_train = 0.3 * preds + 0.7 * y_train
-    # if not PREDICT:
-        # tmp['layer1_combine'] = preds
-        # tmp['newY'] = y_train
-    # preds = xgboost_model(x_train, y_train, x_test)
-    # if not PREDICT:
-        # tmp['layer1_preds'] = layer1_preds
-    # preds = 0.7*preds + 0.3*layer1_preds
-    # preds = layer1_preds
-    # if not PREDICT:
-    #     print("out tmp ")
-    #     tmp['pred'] = preds
-    #     tmp.to_csv('./data/tmp.csv')
+
+    preds = keras_model(x_train, y_train, x_test)
+    print(preds)
     y_test['Y'] = preds
     print(y_test['Y'].var())
     y_test.columns = ['TERMINALNO', 'Pred']
     y_test.set_index('TERMINALNO', inplace=True)
-    # x_test = pd.merge(x_test, y_test, left_index=True, right_index=True)
-    # x_test.set_index('TERMINALNO', inplace=True)
-    # print(x_test.head())
     y_test.to_csv(path_test_out, columns=['Pred'], index=True, index_label=['Id'])
 
 
@@ -506,8 +356,3 @@ if __name__ == "__main__":
     print("****************** start **********************")
     # 程序入口
     make_submissin()
-    # test_time_feature()
-    # test_weekday_feature()
-    # test_xgb_sklearn_model()
-    # test_get_acceleration_feature()
-    # test_gps_feature()

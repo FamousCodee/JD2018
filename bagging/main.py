@@ -90,10 +90,6 @@ def get_acceleration_feature(trainset):
     # print(acc_feature)
     return acc_feature
 
-def test_get_acceleration_feature():
-    train, test = read_csv()
-    get_acceleration_feature(train)
-
 
 def get_direction_feature(trainset):
     """
@@ -185,12 +181,6 @@ def get_gps_feature(trainset):
     gps_feature = pd.merge(gps_feature, dis_min, on='TERMINALNO')
     gps_feature = pd.merge(gps_feature, dis_max, on='TERMINALNO')
     return gps_feature
-
-
-def test_gps_feature():
-    train, test = read_csv()
-    gps = get_gps_feature(train)
-    print(gps)
 
 
 def get_trips_geature(trainset):
@@ -318,10 +308,46 @@ def make_train_set(trainset):
 
 
 def ridge_model(x_train, y_train, x_test):
-    model = linear_model.Ridge()
+    model = linear_model.Ridge(normalize=True)
     model.fit(x_train, y_train)
     preds = model.predict(x_test)
-    preds[preds < 0] = 0
+    return preds
+
+
+def lgb_model(x_train, y_train, x_test):
+    import lightgbm as lgb
+    params = {
+        # 'boosting': 'dart',
+        'learning_rate': 0.01,
+        'application': 'regression',
+        'max_depth': -1,
+        'num_leaves': 5,
+        'verbosity': -1,
+        'feature_fraction': 0.8,
+        'feature_fraction_seed': 9,
+        'bagging_fraction': 0.8,
+        'bagging_freq': 5,
+        'bagging_seed': 9,
+        'min_data_in_leaf': 6,
+        'min_sum_hessian_in_leaf': 11,
+        'metric': 'mae',
+    }
+    d_train = lgb.Dataset(x_train, label=y_train)
+    model = lgb.train(params, train_set=d_train, num_boost_round=300, verbose_eval=20)
+    preds = model.predict(x_test)
+    return preds
+
+
+def lgb_regressor_model(x_train, y_train, x_test):
+    import lightgbm as lgb
+    model_lgb = lgb.LGBMRegressor(objective='regression',num_leaves=5,
+                              learning_rate=0.01, n_estimators=720,
+                              max_bin = 55, bagging_fraction = 0.8,
+                              bagging_freq = 5, feature_fraction = 0.2319,
+                              feature_fraction_seed=9, bagging_seed=9,
+                              min_data_in_leaf =6, min_sum_hessian_in_leaf = 11)
+    model_lgb.fit(x_train, y_train)
+    preds = model_lgb.predict(x_test)
     return preds
 
 
@@ -381,124 +407,30 @@ def xgb_sklearn_submission_model(x_train, y_train, x_test):
     return preds
 
 
-def test_xgb_sklearn_model():
-    train, test = read_csv()
-    x_train, y_train = make_train_set(train)
-    y0_size = y_train[y_train['Y'] == 0].shape[0]
-    y1_size = y_train[y_train['Y'] > 0].shape[0]
-    print("{0: f} \t {1: f}".format(y0_size, y1_size))
-    global SCALE_POS_WEIGHT
-    SCALE_POS_WEIGHT = y0_size / y1_size
-    x_test, y_test = make_train_set(test)
-    y_train = y_train['Y']
-    # feature selection
-    sel = SelectPercentile(f_regression, 50)
-    x_train = sel.fit_transform(x_train, y_train)
-    x_test = sel.transform(x_test)
-    xgb_sklearn_model(x_train, y_train, x_test)
-
-
-def layer1_xgb(train_x, test_x, train_y, test_y, test):
-    param = {
-        'max_depth': 3,
-        'min_child_weight': 5,
-        'gamma': 1,
-        'subsample': 1,
-        'colsample_bytree': 1,
-        'scale_pos_weight': 0.9,
-        'max_delta_step': 0,
-        'lambda': 1,
-        'eta': 0.05,
-        'silent': 1,
-        'objective': 'reg:linear',
-        "seed":1123,
-    }
-    num_round = 1000
-    dtrain = xgb.DMatrix(train_x, label=train_y)
-    dtest = xgb.DMatrix(test_x, label=test_y)
-    evallist = [(dtest, 'eval'), (dtrain, 'train')]
-    model = xgb.train(param, dtrain, num_round, evals=evallist, early_stopping_rounds=10, verbose_eval=250)
-    pred = model.predict(dtest)
-    test = xgb.DMatrix(test)
-    pred_test = model.predict(test)
-    pred[pred < 0] = 0
-    pred_test[pred_test < 0] = 0
-    return pred, pred_test
-
-
-def five_fold_stacking(x_train, y_train, x_test):
-    n = x_train.shape[0] // 5
-    preds = np.array([])
-    layer1_average_pred_test = np.zeros(x_test.shape[0])
-    for i in range(5):
-        x1 = x_train[i*n: (i + 1) *n]
-        y1 = y_train[i*n: (i + 1) *n]
-        if not PREDICT:
-            x = x_train.drop(index=list(np.arange(i * n + 1, (i + 1) * n + 1)))
-        else:
-            x = x_train.drop(index=list(np.arange(i * n, (i + 1) * n)))
-        y = y_train.drop(index=np.arange(i*n, (i + 1) *n))
-        pred, pred_test = layer1_xgb(train_x=x, test_x=x1, train_y=y, test_y=y1, test=x_test)
-        preds = np.append(preds, pred)
-        layer1_average_pred_test += pred_test
-    layer1_average_pred_test /= 5
-    return preds, layer1_average_pred_test
-
-
-SCALE_POS_WEIGHT = 0.0
-
-
 def make_submissin():
     train, test = read_csv()
     x_train, y_train = make_train_set(train)
     y0_size = y_train[y_train['Y'] == 0].shape[0]
     y1_size = y_train[y_train['Y'] > 0].shape[0]
     print("{0: f} \t {1: f}".format(y0_size, y1_size))
-    global SCALE_POS_WEIGHT
-    SCALE_POS_WEIGHT = y0_size / y1_size
     x_test, y_test = make_train_set(test)
     y_train = 10 * y_train['Y']
     # feature selection
     sel = SelectPercentile(f_regression, 70)
     x_train = sel.fit_transform(x_train, y_train)
     x_test = sel.transform(x_test)
-    # preds = xgb_sklearn_submission_model(x_train, y_train, x_test)
-    preds = xgboost_model(x_train, y_train, x_test)
-    # if not PREDICT:
-    #     tmp = pd.DataFrame()
-    #     tmp['rawY'] = y_train
-    # preds1 = xgboost_model(x_train, y_train, x_train)
-    # if not PREDICT:
-    #     tmp['preds1'] = preds1
-    # # y_train = (y_train + preds1) / 2
-    # preds2 = xgboost_model(x_train, y_train, x_train)
-    # if not PREDICT:
-    #     tmp['preds2'] = preds2
-    # y_train = (preds1 + preds2) / 2
-    
-    # tmp['newY'] = y_train
-    # SCALE_POS_WEIGHT = 1
-    # preds, layer1_preds = five_fold_stacking(x_train, y_train, x_test)
-    # y_train = 0.3 * preds + 0.7 * y_train
-    # if not PREDICT:
-        # tmp['layer1_combine'] = preds
-        # tmp['newY'] = y_train
-    # preds = xgboost_model(x_train, y_train, x_test)
-    # if not PREDICT:
-        # tmp['layer1_preds'] = layer1_preds
-    # preds = 0.7*preds + 0.3*layer1_preds
-    # preds = layer1_preds
-    # if not PREDICT:
-    #     print("out tmp ")
-    #     tmp['pred'] = preds
-    #     tmp.to_csv('./data/tmp.csv')
+    preds1 = xgb_sklearn_submission_model(x_train, y_train, x_test)
+    preds2 = xgboost_model(x_train, y_train, x_test)
+    preds3 = ridge_model(x_train, y_train, x_test)
+    preds4 = lgb_model(x_train, y_train, x_test)
+    preds5 = lgb_regressor_model(x_train, y_train, x_test)
+
+    preds = (preds1 + preds2 + preds3 + preds4 + preds5) / 5
+
     y_test['Y'] = preds
     print(y_test['Y'].var())
     y_test.columns = ['TERMINALNO', 'Pred']
     y_test.set_index('TERMINALNO', inplace=True)
-    # x_test = pd.merge(x_test, y_test, left_index=True, right_index=True)
-    # x_test.set_index('TERMINALNO', inplace=True)
-    # print(x_test.head())
     y_test.to_csv(path_test_out, columns=['Pred'], index=True, index_label=['Id'])
 
 
@@ -506,8 +438,4 @@ if __name__ == "__main__":
     print("****************** start **********************")
     # 程序入口
     make_submissin()
-    # test_time_feature()
-    # test_weekday_feature()
-    # test_xgb_sklearn_model()
-    # test_get_acceleration_feature()
-    # test_gps_feature()
+

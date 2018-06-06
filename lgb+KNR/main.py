@@ -1,4 +1,5 @@
 # -*- coding:utf8 -*-
+
 import os
 import csv
 import pandas as pd
@@ -30,9 +31,9 @@ def read_csv(include_zero=True):
     # print("*****************read_csv*******************")
     # for filename in os.listdir(path_train):
     train = pd.read_csv(path_train)
-    if include_zero is False:
-        # print('hello')
-        train = train[(True ^ train['Y'].isin([0]))] # 异或运算符 ^
+    # if include_zero is False:
+    #     # print('hello')
+    #     train = train[(True ^ train['Y'].isin([0]))] # 异或运算符 ^
     nrow_train = train.shape[0]
     test = pd.DataFrame()
     # test = pd.read_csv(path_train)
@@ -135,9 +136,9 @@ def make_train_set(trainset):
 
 
 def knr_model(x_train, y_train, x_test):
-    model = neighbors.KNeighborsRegressor(n_neighbors=5, weights='distance')
+    model = neighbors.KNeighborsRegressor(n_neighbors=30, weights='distance')
     preds = model.fit(x_train, y_train).predict(x_test)
-    preds[preds < 0] = 0
+    # preds[preds < 0] = 0
     return preds
 
 
@@ -145,10 +146,10 @@ def lightgbm_model(x_train, y_train, x_test):
     train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.1, random_state=0)
     params = {
         'boosting': 'dart',
-        'learning_rate': 0.005,
+        'learning_rate': 0.05,
         'application': 'regression',
         'max_depth': -1,
-        'num_leaves': 200,
+        'num_leaves': 10,
         'verbosity': -1,
         # 'metric': 'poisson',
         # 'min_data': 1,
@@ -161,10 +162,10 @@ def lightgbm_model(x_train, y_train, x_test):
     d_train = lgb.Dataset(train_x, label=train_y)
     d_valid = lgb.Dataset(valid_x, label=valid_y)
     watchlist = [d_train, d_valid]
-    model = lgb.train(params, train_set=d_train, num_boost_round=10000, valid_sets=watchlist,
-                      early_stopping_rounds=50, verbose_eval=100)
+    model = lgb.train(params, train_set=d_train, num_boost_round=300, valid_sets=watchlist,
+                      verbose_eval=100)
     preds = model.predict(x_test)
-    preds[preds < 0] = 0
+    # preds[preds < 0] = 0
     return preds
 
 
@@ -181,10 +182,10 @@ def make_submission():
     x_train, y_train = make_train_set(train)
     x_test, y_test = make_train_set(test)
     y_train = y_train['Y']
-    lgb_preds = lightgbm_model(x_train, y_train, x_test)
+    # lgb_preds = lightgbm_model(x_train, y_train, x_test)
 
-    preds = (knr_preds + lgb_preds) / 2
-    y_test['Y'] = preds
+    # preds = (knr_preds + lgb_preds) / 2
+    y_test['Y'] = knr_preds
     print(y_test['Y'].var())
     y_test.columns = ['TERMINALNO', 'Pred']
     y_test.set_index('TERMINALNO', inplace=True)

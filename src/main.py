@@ -8,6 +8,9 @@ from sklearn import linear_model
 import gc 
 from sklearn.model_selection import train_test_split, cross_val_score
 import datetime
+from math import radians, cos, sin, asin, sqrt
+from sklearn.feature_selection import SelectPercentile, f_regression
+
 
 if os.path.exists("./data/PINGAN-2018-train_demo.csv"):
     path_train = "./data/PINGAN-2018-train_demo.csv"
@@ -68,6 +71,29 @@ def get_speed_feature(trainset):
     return speed_feature
 
 
+def get_acceleration_feature(trainset):
+    groupby_userid_tripid = trainset.groupby(['TERMINALNO', 'TRIP_ID'])
+    trainset['SPEED_diff'] = groupby_userid_tripid['SPEED'].diff().fillna(0)
+    groupby_userid_tripid = trainset.groupby('TERMINALNO', as_index=False)
+    max_acc = groupby_userid_tripid['SPEED_diff'].max()
+    max_acc.columns = ['TERMINALNO', 'max_acc']
+    min_acc = groupby_userid_tripid['SPEED_diff'].min()
+    min_acc.columns = ['TERMINALNO', 'min_acc']    
+    mean_acc = groupby_userid_tripid['SPEED_diff'].mean()
+    mean_acc.columns = ['TERMINALNO', 'mean_acc']
+    var_acc = groupby_userid_tripid['SPEED_diff'].var().fillna(0)
+    var_acc.columns = ['TERMINALNO', 'var_acc']    
+    acc_feature = pd.merge(max_acc, min_acc, on='TERMINALNO')
+    acc_feature = pd.merge(acc_feature, mean_acc, on='TERMINALNO')
+    acc_feature = pd.merge(acc_feature, var_acc, on='TERMINALNO')
+    # print(acc_feature)
+    return acc_feature
+
+def test_get_acceleration_feature():
+    train, test = read_csv()
+    get_acceleration_feature(train)
+
+
 def get_direction_feature(trainset):
     """
     方向处理：方差
@@ -110,14 +136,31 @@ def get_height_feature(trainset):
 
     height_feature = mean_height
     # height_feature = pd.merge(height_feature, max_height, on='TERMINALNO')
-    # height_feature = pd.merge(height_feature, max_var, on='TERMINALNO')
+    height_feature = pd.merge(height_feature, max_var, on='TERMINALNO')
     # height_feature = pd.merge(height_feature, min_height, on='TERMINALNO')
     height_feature = pd.merge(height_feature, mean_var, on='TERMINALNO')
     # print(height_feature.head())
     return height_feature
 
 
+def haversine1(lon1, lat1, lon2, lat2):  # 经度1，纬度1，经度2，纬度2 （十进制度数）
+    """
+    Calculate the great circle distance between two points
+    on the earth (specified in decimal degrees)
+    """
+    # 将十进制度数转化为弧度
+    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+    # haversine公式
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+    c = 2 * asin(sqrt(a))
+    r = 6371  # 地球平均半径，单位为公里
+    return c * r * 1000
+
+
 def get_gps_feature(trainset):
+    trainset['hdis'] = trainset.apply(lambda x: haversine1(x['LONGITUDE'], x['LATITUDE'], 113.9177317,22.54334333), axis=1)    
     groupby_userid = trainset.groupby('TERMINALNO', as_index=False)
     max_height = groupby_userid['HEIGHT'].max()
     min_height = groupby_userid['HEIGHT'].min()
@@ -125,12 +168,28 @@ def get_gps_feature(trainset):
     min_longitude = groupby_userid['LONGITUDE'].min()
     max_latitude = groupby_userid['LATITUDE'].max()
     min_latitude = groupby_userid['LATITUDE'].min()
+    mean_longitude = groupby_userid['LONGITUDE'].mean()
+    mean_latitude = groupby_userid['LATITUDE'].mean()
+    dis_mean = groupby_userid['hdis'].mean()
+    dis_min = groupby_userid['hdis'].min()
+    dis_max = groupby_userid['hdis'].max()
     gps_feature = pd.merge(max_height, min_height, on='TERMINALNO')
     gps_feature = pd.merge(gps_feature, max_longitude, on='TERMINALNO')
     gps_feature = pd.merge(gps_feature, min_longitude, on='TERMINALNO')
     gps_feature = pd.merge(gps_feature, max_latitude, on='TERMINALNO')
     gps_feature = pd.merge(gps_feature, min_latitude, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, mean_latitude, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, mean_longitude, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, dis_mean, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, dis_min, on='TERMINALNO')
+    gps_feature = pd.merge(gps_feature, dis_max, on='TERMINALNO')
     return gps_feature
+
+
+def test_gps_feature():
+    train, test = read_csv()
+    gps = get_gps_feature(train)
+    print(gps)
 
 
 def get_trips_geature(trainset):
@@ -154,6 +213,20 @@ def get_call_state_feature(trainset):
         'count4': lambda x: list(x).count(4) / len(x)
     })
     return count
+
+
+def get_time_duration_feature(trainset):
+    groupby_userid_tripid = trainset.groupby(['TERMINALNO', 'TRIP_ID'], as_index=False)
+    # time_max = groupby_userid_tripid['TIME'].max()
+    # time_min = groupby_userid_tripid['TIME'].min()
+    time_delte = groupby_userid_tripid['TIME'].agg({'time_delta': lambda x: x.max() - x.min()})
+    # print(time_delte)
+    time_duration_max = time_delte.groupby('TERMINALNO', as_index=False)['time_delta'].max()
+    time_duration_mean = time_delte.groupby('TERMINALNO', as_index=False)['time_delta'].mean()
+    time_duration_feature = pd.merge(time_duration_max, time_duration_mean, on='TERMINALNO')
+    time_duration_feature.columns = ['TERMINALNO', 'time_duration_max', 'time_duration_mean']
+    # print(time_duration_feature)
+    return time_duration_feature
 
 
 def get_time_feature(trainset):
@@ -188,13 +261,6 @@ def get_time_feature(trainset):
     return time_feature
 
 
-def test_time_feature():
-    train, test = read_csv()
-    tmp = get_time_feature(train)
-    print(tmp.head())
-    print(type(tmp))
-
-
 def get_weekday_feature(trainset):
     trainset['TIME'] = trainset['TIME'].apply(lambda x:datetime.datetime.fromtimestamp(x).weekday())
     groupby_userid_tripid = trainset.groupby(['TERMINALNO', 'TRIP_ID'], as_index=False)
@@ -209,13 +275,6 @@ def get_weekday_feature(trainset):
         'sun':lambda x: list(x).count(6) / len(x),
     })
     return week_feature
-
-
-def test_weekday_feature():
-    train,test = read_csv()
-    tmp = get_weekday_feature(train)
-    print(tmp.head())
-    print(type(tmp))
 
 
 def get_Y(trainset):
@@ -235,10 +294,13 @@ def make_train_set(trainset):
     direction = get_direction_feature(trainset)
     call = get_call_state_feature(trainset)
     height = get_height_feature(trainset)
+    time_duration_feat = get_time_duration_feature(trainset)
+    
     time_feat = get_time_feature(trainset)
     gps_feat = get_gps_feature(trainset)
     trip_feat = get_trips_geature(trainset)
     weekday_feat = get_weekday_feature(trainset)
+    acc_feat = get_acceleration_feature(trainset)
     y = get_Y(trainset)
     x = speed
     x = pd.merge(x, direction, on='TERMINALNO')
@@ -248,6 +310,8 @@ def make_train_set(trainset):
     x = pd.merge(x, gps_feat, on='TERMINALNO')
     x = pd.merge(x, trip_feat, on='TERMINALNO')
     x = pd.merge(x, weekday_feat, on='TERMINALNO')
+    x = pd.merge(x, acc_feat, on='TERMINALNO')
+    x = pd.merge(x, time_duration_feat, on='TERMINALNO')
     x.set_index('TERMINALNO', inplace=True)
     # print("**************make set done**************")
     return x, y
@@ -267,6 +331,10 @@ def lightgbm_make_submission():
     # gc.collect()
     x_test, y_test = make_train_set(test)
     y_train = y_train['Y']
+    # feature selection
+    sel = SelectPercentile(f_regression, 50)
+    x_train = sel.fit_transform(x_train, y_train)
+    x_test = sel.transform(x_test)
     # print("**********************x_train*******************")
     # print(x_train)
     # print("**********************x_train end***************")
@@ -275,49 +343,34 @@ def lightgbm_make_submission():
     # print("**********************x_test end****************")
     train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.2, random_state=0)
     params = {
-        'boosting': 'dart',
-        'learning_rate': 0.005,
+        # 'boosting': 'dart',
+        'learning_rate': 0.01,
         'application': 'regression',
         'max_depth': -1,
-        'num_leaves': 10,
+        'num_leaves': 5,
         'verbosity': -1,
-        'feature_fraction': 0.5,
+        'feature_fraction': 0.8,
         'feature_fraction_seed': 9,
         'bagging_fraction': 0.8,
         'bagging_freq': 5,
         'bagging_seed': 9,
         'min_data_in_leaf': 6,
         'min_sum_hessian_in_leaf': 11,
-        # 'metric': 'poisson',
-        # 'min_data': 1,
-        # 'min_data_in_bin': 1,
-        # 'poisson_max_delta_step': 7,
-        # 'reg_sqrt': True,
-        'metric': 'rmse',
-        # 'metric': ['rmse', 'poisson'],
+        'metric': 'mae',
     }
     d_train = lgb.Dataset(train_x, label=train_y)
     d_valid = lgb.Dataset(valid_x, label=valid_y)
     watchlist = [d_train, d_valid]
-    model = lgb.train(params, train_set=d_train, num_boost_round=10000, valid_sets=watchlist,
-                      early_stopping_rounds=50, verbose_eval=100)
+    model = lgb.train(params, train_set=d_train, num_boost_round=300, valid_sets=watchlist,
+                      verbose_eval=20)
     # if PREDICT:
     print("*******************************start predict***************************")
     preds = model.predict(x_test)
-    preds[preds < 0] = 0
-    # preds = np.sqrt(preds)
-    # preds = np.log1p(preds)
-    # preds = np.expm1(preds)
-    # preds = unsigmoid(preds)
-    # print(preds)
     y_test['Y'] = preds
     print(y_test['Y'].var())
     y_test.columns = ['TERMINALNO', 'Pred']
     y_test.set_index('TERMINALNO', inplace=True)
-    x_test = pd.merge(x_test, y_test, left_index=True, right_index=True)
-    # x_test.set_index('TERMINALNO', inplace=True)
-    # print(x_test.head())
-    x_test.to_csv(path_test_out, columns=['Pred'], index=True, index_label=['Id'])
+    y_test.to_csv(path_test_out, columns=['Pred'], index=True, index_label=['Id'])
 
 
 def ridge_make_submission():
@@ -325,18 +378,23 @@ def ridge_make_submission():
     x_train, y_train = make_train_set(train)
     x_test, y_test = make_train_set(test)
     y_train = y_train['Y']
-    model = linear_model.Ridge()
+    # feature selection
+    sel = SelectPercentile(f_regression, 70)
+    x_train = sel.fit_transform(x_train, y_train)
+    x_test = sel.transform(x_test)
+
+    model = linear_model.Ridge(normalize=True)
     model.fit(x_train, y_train)
     preds = model.predict(x_test)
-    preds[preds < 0] = 0
+    # preds[preds < 0] = 0
     y_test['Y'] = preds
     print(y_test['Y'].var())
     y_test.columns = ['TERMINALNO', 'Pred']
     y_test.set_index('TERMINALNO', inplace=True)
-    x_test = pd.merge(x_test, y_test, left_index=True, right_index=True)
+    # x_test = pd.merge(x_test, y_test, left_index=True, right_index=True)
     # x_test.set_index('TERMINALNO', inplace=True)
     # print(x_test.head())
-    x_test.to_csv(path_test_out, columns=['Pred'], index=True, index_label=['Id'])
+    y_test.to_csv(path_test_out, columns=['Pred'], index=True, index_label=['Id'])
 
 
 def process():
